@@ -1,0 +1,224 @@
+diff -Naur openswan-2.6.32-orig/include/ipsecconf/keywords.h openswan-2.6.32/include/ipsecconf/keywords.h
+--- openswan-2.6.32-orig/include/ipsecconf/keywords.h	2013-10-09 13:50:11.887232061 -0400
++++ openswan-2.6.32/include/ipsecconf/keywords.h	2013-10-09 13:51:53.364156306 -0400
+@@ -112,6 +112,7 @@
+     KBF_WARNIGNORE, /* to ignore obsoleted keywords */
+     KBF_SECCTX, /*security context attribute value for labeled ipsec*/
+     KBF_IKE_FRAG,
++    KBF_INITIAL_CONTACT,
+     KBF_MAX         
+ };
+ 
+diff -Naur openswan-2.6.32-orig/include/whack.h openswan-2.6.32/include/whack.h
+--- openswan-2.6.32-orig/include/whack.h	2013-10-09 13:50:11.866231663 -0400
++++ openswan-2.6.32/include/whack.h	2013-10-09 13:52:27.892811000 -0400
+@@ -132,6 +132,9 @@
+     /* Force the use of NAT-T on a connection */
+     bool forceencaps;
+ 
++    /* Option to allow sending INITIAL-CONTACT payload - default is disabled */
++    bool initial_contact;
++
+     enum keyword_sha2_truncbug sha2_truncbug;
+ 
+     /*Checking if this connection is configured by Network Manager*/
+diff -Naur openswan-2.6.32-orig/lib/libipsecconf/confread.c openswan-2.6.32/lib/libipsecconf/confread.c
+--- openswan-2.6.32-orig/lib/libipsecconf/confread.c	2013-10-09 13:50:11.888232080 -0400
++++ openswan-2.6.32/lib/libipsecconf/confread.c	2013-10-09 13:53:59.919555786 -0400
+@@ -74,6 +74,8 @@
+ #endif
+ 	cfg->conn_default.options[KBF_TYPE] = KS_TUNNEL;
+ 
++	cfg->conn_default.options[KBF_INITIAL_CONTACT] = FALSE;
++
+ 	/*Cisco interop: remote peer type*/
+ 	cfg->conn_default.options[KBF_REMOTEPEERTYPE] = NON_CISCO;
+ 
+diff -Naur openswan-2.6.32-orig/lib/libipsecconf/keywords.c openswan-2.6.32/lib/libipsecconf/keywords.c
+--- openswan-2.6.32-orig/lib/libipsecconf/keywords.c	2013-10-09 13:50:11.888232080 -0400
++++ openswan-2.6.32/lib/libipsecconf/keywords.c	2013-10-09 13:54:39.732310564 -0400
+@@ -422,6 +422,7 @@
+     {"sareftrack",     kv_conn|kv_auto|kv_processed,kt_enum,KBF_SAREFTRACK,&kw_sareftrack_list},
+     {"ike_frag",       kv_conn|kv_auto|kv_processed,kt_enum,KBF_IKE_FRAG,&kw_ynf_list},
+     {"pfs",            kv_conn|kv_auto, kt_bool,   KBF_PFS,          NOT_ENUM},
++    {"initial_contact", kv_conn|kv_auto, kt_bool,   KBF_INITIAL_CONTACT,          NOT_ENUM},
+     {"sha2_truncbug",  kv_conn|kv_auto, kt_enum,   KBF_SHA2_TRUNCBUG,          &kw_sha2_truncbug},
+     {"keylife",        kv_conn|kv_auto|kv_alias, kt_time,   KBF_SALIFETIME,NOT_ENUM},
+     {"lifetime",       kv_conn|kv_auto|kv_alias, kt_time,   KBF_SALIFETIME,NOT_ENUM},
+diff -Naur openswan-2.6.32-orig/lib/libipsecconf/starterwhack.c openswan-2.6.32/lib/libipsecconf/starterwhack.c
+--- openswan-2.6.32-orig/lib/libipsecconf/starterwhack.c	2013-10-09 13:50:11.866231663 -0400
++++ openswan-2.6.32/lib/libipsecconf/starterwhack.c	2013-10-09 13:55:12.042923089 -0400
+@@ -516,6 +516,10 @@
+ 	}
+ #endif
+ 
++	if(conn->options_set[KBF_INITIAL_CONTACT]) {
++		msg.initial_contact=conn->options[KBF_INITIAL_CONTACT];
++	}
++
+ 	/*Cisco interop : remote peer type*/
+ 	if(conn->options_set[KBF_REMOTEPEERTYPE]) {
+ 		msg.remotepeertype=conn->options[KBF_REMOTEPEERTYPE];
+diff -Naur openswan-2.6.32-orig/programs/pluto/connections.c openswan-2.6.32/programs/pluto/connections.c
+--- openswan-2.6.32-orig/programs/pluto/connections.c	2013-10-09 13:50:11.882231966 -0400
++++ openswan-2.6.32/programs/pluto/connections.c	2013-10-09 13:56:47.737748012 -0400
+@@ -1360,6 +1360,7 @@
+ 	c->metric = wm->metric;
+ 
+ 	c->forceencaps = wm->forceencaps;
++	c->initial_contact = wm->initial_contact;
+ 
+ 	c->addr_family = wm->addr_family;
+ 	c->tunnel_addr_family = wm->tunnel_addr_family;
+@@ -1532,12 +1533,13 @@
+ 
+ 	DBG(DBG_CONTROL,
+ 	    DBG_log("ike_life: %lus; ipsec_life: %lus; rekey_margin: %lus;"
+-		" rekey_fuzz: %lu%%; keyingtries: %lu; policy: %s"
++		" rekey_fuzz: %lu%%; keyingtries: %lu;%s policy: %s"
+ 		, (unsigned long) c->sa_ike_life_seconds
+ 		, (unsigned long) c->sa_ipsec_life_seconds
+ 		, (unsigned long) c->sa_rekey_margin
+ 		, (unsigned long) c->sa_rekey_fuzz
+ 		, (unsigned long) c->sa_keying_tries
++		, (c->initial_contact) ? "; initial_contact: yes" : ""
+ 		, prettypolicy(c->policy));
+ 	);
+     } else {
+diff -Naur openswan-2.6.32-orig/programs/pluto/connections.h openswan-2.6.32/programs/pluto/connections.h
+--- openswan-2.6.32-orig/programs/pluto/connections.h	2013-10-09 13:50:11.868231701 -0400
++++ openswan-2.6.32/programs/pluto/connections.h	2013-10-09 13:57:25.072471242 -0400
+@@ -202,6 +202,8 @@
+     time_t          dpd_timeout;            /* time after which we are dead */
+     enum dpd_action dpd_action;             /* what to do when we die */
+ 
++    bool            initial_contact;      /* Send INITIAL_CONTACT (RFC-2407) payload? */
++
+     /*Cisco interop: remote peer type*/
+     enum keyword_remotepeertype remotepeertype;
+ 
+diff -Naur openswan-2.6.32-orig/programs/pluto/ikev1_main.c openswan-2.6.32/programs/pluto/ikev1_main.c
+--- openswan-2.6.32-orig/programs/pluto/ikev1_main.c	2013-10-09 13:50:11.891232137 -0400
++++ openswan-2.6.32/programs/pluto/ikev1_main.c	2013-10-09 14:01:59.174771523 -0400
+@@ -1598,6 +1598,7 @@
+     pb_stream id_pbs;	/* ID Payload; also used for hash calculation */
+     bool send_cert = FALSE;
+     bool send_cr = FALSE;
++    bool initial_contact = FALSE;
+     generalName_t *requested_ca = NULL;
+     cert_t mycert = st->st_connection->spd.this.cert;
+ 
+@@ -1643,6 +1644,25 @@
+      */
+     free_generalNames(requested_ca, TRUE);
+ 
++
++    /*
++     * Determine if we need to send INITIAL_CONTACT payload
++     *
++     * We are INITIATOR in I2, this is not a Quick Mode rekey, so if there is
++     * a phase2 that we have for which the phase1 expired, this state has no way of
++     * finding out, so this would mean adding the payload, which would destroy the
++     * remote phase2, and cause downtime until we establish the new phase2. It
++     * is better not to send this payload, which is why the per-connection
++     * keyword default for initial_contact is 'no'. But some interop with Cisco
++     * requires this.
++     *
++     * In Quick Mode, we need to do a little more work, but that's in ikev1_quick.c
++     *
++     */
++    initial_contact = st->st_connection->initial_contact;
++    openswan_log("I will %ssend an initial contact payload", initial_contact ? "" : "NOT ");
++
++
+     /* done parsing; initialize crypto  */
+ 
+ #ifdef NAT_TRAVERSAL
+@@ -1736,7 +1756,7 @@
+ 	if (auth_payload == ISAKMP_NEXT_HASH)
+ 	{
+ 	    /* HASH_I out */
+-	    if (!out_generic_raw(ISAKMP_NEXT_NONE
++	     if (!out_generic_raw(initial_contact ? ISAKMP_NEXT_N : ISAKMP_NEXT_NONE
+ 				 , &isakmp_hash_desc
+ 				 , &md->rbody
+ 				 , hash_val, hash_len, "HASH_I"))
+@@ -1755,7 +1775,7 @@
+ 		return STF_FAIL + AUTHENTICATION_FAILED;
+ 	    }
+ 
+-	    if (!out_generic_raw(ISAKMP_NEXT_NONE
++	    if (!out_generic_raw(initial_contact ? ISAKMP_NEXT_N : ISAKMP_NEXT_NONE
+ 				 , &isakmp_signature_desc
+ 				 , &md->rbody
+ 				 , sig_val
+@@ -1765,6 +1785,31 @@
+ 	}
+     }
+ 
++    /* INITIAL_CONTACT */
++    if (initial_contact)
++    {
++	pb_stream notify_pbs;
++	struct isakmp_notification isan;
++
++	openswan_log("I am sending INITIAL_CONTACT");
++
++	isan.isan_np = ISAKMP_NEXT_NONE;
++	isan.isan_doi = ISAKMP_DOI_IPSEC;
++	isan.isan_protoid = PROTO_ISAKMP;
++	isan.isan_spisize = COOKIE_SIZE * 2;
++	isan.isan_type = IPSEC_INITIAL_CONTACT;
++	if (!out_struct(&isan, &isakmp_notification_desc, &md->rbody, &notify_pbs))
++	    return STF_INTERNAL_ERROR;
++	if (!out_raw(st->st_icookie, COOKIE_SIZE, &notify_pbs, "notify icookie"))
++	    return STF_INTERNAL_ERROR;
++	if (!out_raw(st->st_rcookie, COOKIE_SIZE, &notify_pbs, "notify rcookie"))
++	    return STF_INTERNAL_ERROR;
++	/* zero length data payload */
++	close_output_pbs(&notify_pbs);
++    } else {
++	openswan_log("Not sending INITIAL_CONTACT");
++    }
++
+     /* encrypt message, except for fixed part of header */
+ 
+     /* st_new_iv was computed by generate_skeyids_iv */
+diff -Naur openswan-2.6.32-orig/programs/pluto/whack.c openswan-2.6.32/programs/pluto/whack.c
+--- openswan-2.6.32-orig/programs/pluto/whack.c	2013-10-09 13:50:11.894232194 -0400
++++ openswan-2.6.32/programs/pluto/whack.c	2013-10-09 14:03:16.016254581 -0400
+@@ -127,6 +127,7 @@
+ 	    " \\\n   "
+ 	    " [--dontrekey]"
+ 	    " [--aggrmode]"
++	    " [--initialcontact]"
+ 	    " [--forceencaps]"
+             " \\\n   "
+             " [--dpddelay <seconds> --dpdtimeout <seconds>]"
+@@ -483,6 +484,7 @@
+     CD_DPDTIMEOUT,
+     CD_DPDACTION,
+     CD_FORCEENCAPS,
++    CD_INITIAL_CONTACT,
+     CD_IKE,
+     CD_PFSGROUP,
+     CD_REMOTEPEERTYPE,
+@@ -668,6 +670,7 @@
+ 	, CD_FAIL0 + (POLICY_FAIL_REJECT >> POLICY_FAIL_SHIFT << AUX_SHIFT) + OO },
+     { "dontrekey", no_argument, NULL, CD_DONT_REKEY + OO },
+     { "forceencaps", no_argument, NULL, CD_FORCEENCAPS + OO },
++    { "initialcontact", no_argument, NULL, CD_INITIAL_CONTACT + OO },
+     { "dpddelay", required_argument, NULL, CD_DPDDELAY + OO + NUMERIC_ARG },
+     { "dpdtimeout", required_argument, NULL, CD_DPDTIMEOUT + OO + NUMERIC_ARG },
+     { "dpdaction", required_argument, NULL, CD_DPDACTION + OO },
+@@ -1498,6 +1501,10 @@
+             msg.forceencaps = TRUE;
+             continue;
+ 
++        case CD_INITIAL_CONTACT: /* --initialcontact */
++            msg.initial_contact = TRUE;
++            continue;
++
+         case CD_DPDDELAY:
+             msg.dpd_delay = opt_whole;
+             continue;
