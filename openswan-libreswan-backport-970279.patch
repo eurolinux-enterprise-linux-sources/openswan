@@ -1,0 +1,40 @@
+diff -Naur openswan-2.6.32-orig/programs/pluto/ikev1_main.c openswan-2.6.32/programs/pluto/ikev1_main.c
+--- openswan-2.6.32-orig/programs/pluto/ikev1_main.c	2014-06-20 14:35:23.646819340 -0400
++++ openswan-2.6.32/programs/pluto/ikev1_main.c	2014-06-20 16:40:18.596939044 -0400
+@@ -782,6 +782,14 @@
+ 			     , &md->sender
+ 			     , md->sender_port, LEMPTY);
+ 
++	if (c !=  NULL && (c->policy & POLICY_IKEV1_DISABLE)) {
++		loglog(RC_LOG_SERIOUS, "discard matching conn %s for I1 from "
++			"%s:%u. has ikev2=insist", c->name, 
++			ip_str(&md->iface->ip_addr), 
++			ntohs(portof(&md->iface->ip_addr)));
++		c = NULL;
++	}
++
+     if (c == NULL)
+     {
+ 	pb_stream pre_sa_pbs = sa_pd->pbs;
+@@ -804,6 +812,21 @@
+ 
+ 	    for (; d != NULL; d = d->hp_next)
+ 	    {
++		if (d != NULL && d->policy & POLICY_IKEV1_DISABLE) {
++			loglog(RC_LOG_SERIOUS, 
++				"discard matching conn %s for "
++				"I1 from %s:%u. %s %s %s has "
++				"ikev2=insist ", d->name, 
++				ip_str(&md->iface->ip_addr),
++				ntohs(portof(&md->iface->ip_addr)),
++				d->name,
++				(policy != LEMPTY) ? " with policy=" : "", 
++				(policy != LEMPTY) ? 
++				bitnamesof(sa_policy_bit_names, policy) : "");
++			d=NULL;
++			continue;
++		}
++
+ 		if (d->kind == CK_GROUP)
+ 		{
+ 		    /* ignore */

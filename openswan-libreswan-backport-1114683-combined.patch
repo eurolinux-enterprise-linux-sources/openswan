@@ -1,0 +1,3207 @@
+diff -Naur openswan-2.6.32-orig/include/ietf_constants.h openswan-2.6.32/include/ietf_constants.h
+--- openswan-2.6.32-orig/include/ietf_constants.h	2014-09-17 10:10:43.732000000 -0400
++++ openswan-2.6.32/include/ietf_constants.h	2014-09-17 10:11:12.353000000 -0400
+@@ -267,6 +267,83 @@
+ #define COOKIE_SIZE 8
+ #define MAX_ISAKMP_SPI_SIZE 16
+ 
++/* Various IETF defined key lengths */
++
++/* AES-CBC RFC 3602 The _only_ valid values are 128, 192 and 256 bits */
++#define  AES_KEY_MIN_LEN        128
++#define  AES_KEY_DEF_LEN        128
++#define  AES_KEY_MAX_LEN        256
++
++/* AES-CTR RFC 3686 The _only_ valid values are 128, 192 and 256 bits */
++#define  AES_CTR_KEY_MIN_LEN 128
++#define  AES_CTR_KEY_DEF_LEN 128
++#define  AES_CTR_KEY_MAX_LEN 256
++
++/*
++ * RFC 4106 AES GCM
++ * http://tools.ietf.org/html/rfc4106#section-8.1
++ */
++#define AES_GCM_SALT_BYTES 4
++#define AES_GCM_KEY_MIN_LEN 128
++#define AES_GCM_KEY_DEF_LEN 128
++#define AES_GCM_KEY_MAX_LEN 256
++
++/*
++ * RFC 4309 AES CCM
++ * http://tools.ietf.org/search/rfc4309#section-7.1
++ */
++#define AES_CCM_SALT_BYTES 3
++#define AES_CCM_KEY_MIN_LEN 128
++#define AES_CCM_KEY_DEF_LEN 128
++#define AES_CCM_KEY_MAX_LEN 256
++
++/* The _only_ valid values are 128, 192 and 256 bits */
++#define  AEAD_AES_KEY_MIN_LEN       128
++#define  AEAD_AES_KEY_DEF_LEN       128
++#define  AEAD_AES_KEY_MAX_LEN       256
++
++/*
++ * http://tools.ietf.org/html/rfc2451#section-2.2
++ * ESP_CAST is the cast5 algorithm, not cast6
++ * We avoid cast-128 padding by enforcing a minimum of 128
++ */
++#define  CAST_KEY_MIN_LEN        128
++#define  CAST_KEY_DEF_LEN        128
++#define  CAST_KEY_MAX_LEN        128
++
++/*
++ * RFC 2451 - Blowfish accepts key sizes 40-448, default is 128
++ *            128,192 and 256 are the only commonly used ones
++ */
++
++/*
++ * TWOFISH-CBC is a 128-bit block cipher with variable-length key upto 256 bits
++ * default is 128. 128,192 and 256 are the only commonly used ones
++ */
++#define  TWOFISH_KEY_MIN_LEN 128
++#define  TWOFISH_KEY_DEF_LEN 128
++#define  TWOFISH_KEY_MAX_LEN 256
++
++/*
++ * SERPENT default 128, 128,192 and 256 are the only commonly used ones
++ */
++#define  SERPENT_KEY_MIN_LEN 128
++#define  SERPENT_KEY_DEF_LEN 128
++#define  SERPENT_KEY_MAX_LEN 256
++
++/*
++ * Camellia CBC and CTR - RFC 5529
++ * 128 (default), 192 and 256
++ */
++#define  CAMELLIA_KEY_MIN_LEN 128
++#define  CAMELLIA_KEY_DEF_LEN 128
++#define  CAMELLIA_KEY_MAX_LEN 256
++
++#define  CAMELLIA_CTR_KEY_MIN_LEN 128
++#define  CAMELLIA_CTR_KEY_DEF_LEN 128
++#define  CAMELLIA_CTR_KEY_MAX_LEN 256
++
++
+ #define MD2_DIGEST_SIZE         BYTES_FOR_BITS(128)     /* ought to be supplied by md2.h */
+ #define MD5_DIGEST_SIZE		BYTES_FOR_BITS(128)	/* ought to be supplied by md5.h */
+ #define MD5_DIGEST_SIZE_96     BYTES_FOR_BITS(96)      /* IKEV2 integrity algorithms */
+@@ -279,6 +356,7 @@
+ 
+ #define DES_CBC_BLOCK_SIZE	BYTES_FOR_BITS(64)
+ #define AES_CBC_BLOCK_SIZE      BYTES_FOR_BITS(128)
++#define CAST_CBC_BLOCK_SIZE BYTES_FOR_BITS(128)
+ 
+ #define DSS_QBITS	160	/* bits in DSS's "q" (FIPS 186-1) */
+ 
+@@ -549,6 +627,7 @@
+ };
+ 
+ enum ikev2_trans_type_encr {
++	IKEv2_ENCR_reserved = 0,
+ 	IKEv2_ENCR_DES_IV64 = 1,
+ 	IKEv2_ENCR_DES      = 2,
+ 	IKEv2_ENCR_3DES     = 3,
+@@ -571,8 +650,16 @@
+ 	IKEv2_ENCR_AES_GCM_16 = 20,
+ 	IKEv2_ENC_NULL_AUTH_AES_GMAC = 21,
+ 	IKEv2_RESERVED_IEEE_P1619_XTS_AES = 22,
+-	/* 23 - 1023 Reserved to IANA */
++	IKEv2_ENCR_CAMELLIA_CBC = 23,
++	IKEv2_ENCR_CAMELLIA_CTR = 24,
++	IKEv2_ENCR_CAMELLIA_CCM_A = 25, /* AMELLIA_CCM_8 RFC 5529 */
++	IKEv2_ENCR_CAMELLIA_CCM_B = 26, /* AMELLIA_CCM_12 RFC 5529 */
++	IKEv2_ENCR_CAMELLIA_CCM_C = 27, /* AMELLIA_CCM_16 RFC 5529 */
++	/* 28 - 1023 Reserved to IANA */
+ 	/* 1024 - 65535 Private Use */
++	IKEv2_ENCR_SERPENT_CBC = 65004,
++	IKEv2_ENCR_TWOFISH_CBC = 65005,
++	IKEv2_ENCR_TWOFISH_CBC_SSH = 65289,
+ 	IKEv2_ENCR_INVALID  = 65536
+ };
+ 
+@@ -792,6 +879,10 @@
+ 	AUTH_ALGORITHM_HMAC_SHA2_512=7,
+ 	AUTH_ALGORITHM_HMAC_RIPEMD=8,
+ 	AUTH_ALGORITHM_AES_CBC=9,
++	AUTH_ALGORITHM_SIG_RSA = 10,    /* RFC 4359 */
++	AUTH_ALGORITHM_AES_128_GMAC = 11,       /* RFC 4542 */
++	AUTH_ALGORITHM_AES_192_GMAC = 12,       /* RFC 4542 */
++	AUTH_ALGORITHM_AES_256_GMAC =  13,      /* RFC 4542 */
+ 	AUTH_ALGORITHM_NULL_KAME=251, /* why do we load this ? */
+ 	AUTH_ALGORITHM_HMAC_SHA2_256_TRUNCBUG=252,
+ };
+diff -Naur openswan-2.6.32-orig/include/kernel_alg.h openswan-2.6.32/include/kernel_alg.h
+--- openswan-2.6.32-orig/include/kernel_alg.h	2010-12-17 20:23:54.000000000 -0500
++++ openswan-2.6.32/include/kernel_alg.h	2014-09-17 10:11:12.354000000 -0400
+@@ -32,7 +32,7 @@
+ extern struct sadb_alg *kernel_alg_esp_sadb_alg(int alg_id);
+ extern int kernel_alg_esp_ivlen(int alg_id);
+ /* returns bool success if esp encrypt alg is present  */
+-extern err_t kernel_alg_esp_enc_ok(int alg_id, unsigned int key_len, struct alg_info_esp *nfo);
++extern err_t kernel_alg_esp_enc_ok(int alg_id, unsigned int key_len);
+ extern bool kernel_alg_esp_ok_final(int ealg, unsigned int key_len, int aalg, struct alg_info_esp *alg_info);
+ /* returns encrypt keylen in BYTES for esp enc alg passed */
+ extern int kernel_alg_esp_enc_keylen(int alg_id);
+diff -Naur openswan-2.6.32-orig/include/linux/pfkeyv2.h openswan-2.6.32/include/linux/pfkeyv2.h
+--- openswan-2.6.32-orig/include/linux/pfkeyv2.h	2014-09-17 10:10:43.531000000 -0400
++++ openswan-2.6.32/include/linux/pfkeyv2.h	2014-09-17 10:11:12.354000000 -0400
+@@ -276,7 +276,6 @@
+ #define SADB_X_AALG_SHA2_256HMAC	5
+ #define SADB_X_AALG_SHA2_384HMAC	6
+ #define SADB_X_AALG_SHA2_512HMAC	7
+-#define SADB_X_AALG_RIPEMD160HMAC	8
+ #define SADB_X_AALG_NULL		251	/* kame */
+ #define SADB_X_AALG_SHA2_256HMAC_TRUNCBUG	252
+ #define SADB_AALG_MAX			255 /* while the AUTH_ALGORITHM is two octets, what is the SADB_AALG? */
+@@ -297,8 +296,6 @@
+ #define SADB_X_EALG_AES_GCM_ICV8	18
+ #define SADB_X_EALG_AES_GCM_ICV12	19
+ #define SADB_X_EALG_AES_GCM_ICV16	20
+-#define SADB_X_EALG_NULL_AUTH_AES_GMAC	21
+-#define SADB_X_EALG_CAMELLIACBC		22
+ 
+ #define SADB_EALG_MAX                   253 /* last EALG */
+ /* private allocations should use 249-255 (RFC2407) */
+diff -Naur openswan-2.6.32-orig/lib/libopenswan/alg_info.c openswan-2.6.32/lib/libopenswan/alg_info.c
+--- openswan-2.6.32-orig/lib/libopenswan/alg_info.c	2014-09-17 10:10:43.759000000 -0400
++++ openswan-2.6.32/lib/libopenswan/alg_info.c	2014-09-17 10:11:12.355000000 -0400
+@@ -59,8 +59,6 @@
+ 		    return AH_SHA2_384;
+ 		case AUTH_ALGORITHM_HMAC_SHA2_512:
+ 		    return AH_SHA2_512;
+-		case AUTH_ALGORITHM_HMAC_RIPEMD:
+-		    return AH_RIPEMD;
+ 		case AUTH_ALGORITHM_NONE:
+ 		    return AH_NONE;
+ 
+@@ -102,9 +100,10 @@
+     case IKEv2_AUTH_AES_128_GMAC:
+     case IKEv2_AUTH_AES_192_GMAC:
+     case IKEv2_AUTH_AES_256_GMAC:
+-	bad_case(ti);
++    default:
++	// bad_case(ti);
++	return 0;
+     }
+-    return 0;
+ }
+ 
+ int /* __attribute__ ((unused)) */
+@@ -120,7 +119,6 @@
+ 		case AUTH_ALGORITHM_HMAC_SHA2_256:
+ 		case AUTH_ALGORITHM_HMAC_SHA2_384:
+ 		case AUTH_ALGORITHM_HMAC_SHA2_512:
+-		case AUTH_ALGORITHM_HMAC_RIPEMD:
+ 			auth=sadb_aalg;
+ 			break;
+ 		default:
+@@ -595,6 +593,7 @@
+ 		    , const struct oakley_group_desc *(*lookup_group)(u_int16_t group)
+ 		    , bool permitike)
+ {
++#define COMMON_KEY_LENGTHS(x) (x == 0 || x == 128 || x == 192 || x == 256)
+ 	int ealg_id, aalg_id;
+ 	int modp_id = 0;
+ 	const struct oakley_group_desc *gd;
+@@ -608,8 +607,98 @@
+ 	    }
+ 	    if (ealg_id<0) {
+ 		p_ctx->err="enc_alg not found";
+-		goto out;
++		return -1;
+ 	    }
++	    /* reject things we know but don't like */
++	    switch(alg_info->alg_info_protoid) {
++		case PROTO_ISAKMP:
++			switch(ealg_id) {
++				case OAKLEY_DES_CBC:
++				case OAKLEY_IDEA_CBC:
++				case OAKLEY_BLOWFISH_CBC:
++				case OAKLEY_RC5_R16_B64_CBC:
++					p_ctx->err = "cipher not implemented";
++					return -1;
++			}
++			break;
++		case PROTO_IPSEC_ESP:
++			switch(ealg_id) {
++				case ESP_reserved:
++				case ESP_DES_IV64:
++				case ESP_DES:
++				case ESP_RC5:
++				case ESP_IDEA:
++				case ESP_BLOWFISH:
++				case ESP_3IDEA:
++				case ESP_DES_IV32:
++				case ESP_RC4:
++				case ESP_ID17:
++					p_ctx->err = "cipher not implemented";
++					return -1;
++			}
++			break;
++	    }
++
++               /*
++		* Enforce RFC restrictions in key size, documented in
++		* ietf_constants.h
++		*/
++		if (p_ctx->eklen != 0) {
++			switch(alg_info->alg_info_protoid) {
++			case PROTO_ISAKMP:
++				switch(ealg_id) {
++				case OAKLEY_3DES_CBC:
++					p_ctx->err = "3DES does not take variable key lengths";
++					return -1;
++				case OAKLEY_CAST_CBC:
++					if (!COMMON_KEY_LENGTHS(p_ctx->eklen)) {
++						p_ctx->err = "CAST is only supported for 128 bits (to avoid padding)";
++						return -1;
++					}
++                                        break;
++				case OAKLEY_AES_CBC:
++				case OAKLEY_CAMELLIA_CBC:
++				case OAKLEY_SERPENT_CBC:
++				case OAKLEY_TWOFISH_CBC:
++				case OAKLEY_TWOFISH_CBC_SSH:
++					if (!COMMON_KEY_LENGTHS(p_ctx->eklen)) {
++						p_ctx->err =  "wrong encryption key length - key size must be 128 (default), 192 or 256";
++						return -1;
++					}
++					break;
++				}
++			case PROTO_IPSEC_ESP:
++				switch(ealg_id) {
++				case ESP_3DES:
++					p_ctx->err = "3DES does not take variable key lengths";
++					return -1;
++				case ESP_NULL:
++					p_ctx->err = "NULL does not take variable key lengths";
++					return -1;
++				case ESP_CAST:
++					if (!COMMON_KEY_LENGTHS(p_ctx->eklen)) {
++						p_ctx->err = "CAST is only supported for 128 bits (to avoid padding)";
++						return -1;
++					}
++					break;
++				case ESP_AES:
++				case ESP_AES_CTR:
++				case ESP_AES_GCM_8:
++				case ESP_AES_GCM_12:
++				case ESP_AES_GCM_16:
++				case ESP_AES_CCM_8:
++				case ESP_AES_CCM_12:
++				case ESP_AES_CCM_16:
++				case ESP_TWOFISH:
++				case ESP_SERPENT:
++					if (!COMMON_KEY_LENGTHS(p_ctx->eklen)) {
++						 p_ctx->err =  "wrong encryption key length - key size must be 128 (default), 192 or 256";
++						return -1;
++					}
++					break;
++				}
++			}
++		}
+ 	    DBG(DBG_CRYPT, DBG_log("parser_alg_info_add() "
+ 				   "ealg_getbyname(\"%s\")=%d",
+ 				   p_ctx->ealg_buf,
+@@ -619,9 +708,38 @@
+ 	    aalg_id=p_ctx->aalg_getbyname(p_ctx->aalg_buf, strlen(p_ctx->aalg_buf));
+ 	    if (aalg_id<0) {
+ 		p_ctx->err="hash_alg not found";
+-		goto out;
++		return -1;
+ 	    }
+ 
++	    if (p_ctx->aklen != 0) {
++		switch(aalg_id) {
++		case AH_MD5:
++			if (p_ctx->aklen != HMAC_MD5_KEY_LEN * BITS_PER_BYTE) {
++				p_ctx->err = "wrong authenticaion key length - key size must be 160";
++				return -1;
++			}
++			break;
++			case AH_SHA:
++			case AH_SHA2_256:
++				if (p_ctx->aklen != 256) {
++					p_ctx->err = "wrong authenticaion key length - key size must be 256";
++					return -1;
++				}
++				break;
++			case AH_SHA2_384:
++				if (p_ctx->aklen != 384) {
++					p_ctx->err = "wrong authenticaion key length - key size must be 384";
++					return -1;
++				}
++				break;
++			case AH_SHA2_512:
++				if (p_ctx->aklen != 512) {
++					p_ctx->err = "wrong authenticaion key length - key size must be 512";
++					return -1;
++				}
++				break;
++			}
++	    }
+ 	    DBG(DBG_CRYPT, DBG_log("parser_alg_info_add() "
+ 				   "aalg_getbyname(\"%s\")=%d",
+ 				   p_ctx->aalg_buf,
+@@ -631,7 +749,7 @@
+ 	    modp_id=p_ctx->modp_getbyname(p_ctx->modp_buf, strlen(p_ctx->modp_buf));
+ 	    if (modp_id<0) {
+ 		p_ctx->err="modp group not found";
+-		goto out;
++		return -1;
+ 	    }
+ 
+ 	    DBG(DBG_CRYPT, DBG_log("parser_alg_info_add() "
+@@ -641,7 +759,7 @@
+ 
+ 	    if (modp_id && !(gd=lookup_group(modp_id))) {
+ 		p_ctx->err="found modp group id, but not supported";
+-		goto out;
++		return -1;
+ 	    }
+ 	}
+ 
+@@ -650,9 +768,8 @@
+ 			,aalg_id, p_ctx->aklen
+ 			,modp_id, permitike);
+ 	return 0;
+- out:
+-	return -1;
+ }
++#undef COMMON_KEY_LENGTHS
+ 
+ int
+ alg_info_parse_str (struct alg_info *alg_info
+diff -Naur openswan-2.6.32-orig/lib/libopenswan/constants.c openswan-2.6.32/lib/libopenswan/constants.c
+--- openswan-2.6.32-orig/lib/libopenswan/constants.c	2014-09-17 10:10:43.770000000 -0400
++++ openswan-2.6.32/lib/libopenswan/constants.c	2014-09-17 10:11:12.357000000 -0400
+@@ -285,6 +285,17 @@
+ 
+ /* IPsec AH transform values */
+ 
++static const char *const ah_transform_name_private_use[] = {
++	"AH_NULL",      /* verify with kame source? 251 */
++};
++
++static enum_names ah_transformid_names_private_use = {
++	AH_NULL,
++	AH_NULL,
++	ah_transform_name_private_use,
++	NULL
++};
++
+ static const char *const ah_transform_name[] = {
+ 	"AH_MD5",
+ 	"AH_SHA",
+@@ -292,13 +303,33 @@
+ 	"AH_SHA2_256",
+ 	"AH_SHA2_384",
+ 	"AH_SHA2_512",
++	"AH_RIPEMD",
++	"AH_AES_XCBC",
+     };
+ 
+ enum_names ah_transformid_names =
+-    { AH_MD5, AH_SHA2_512, ah_transform_name, NULL };
++    { AH_MD5, AH_AES_XCBC, ah_transform_name, &ah_transformid_names_private_use };
+ 
+ /* IPsec ESP transform values */
+ 
++static const char *const esp_transform_name_private_use[] = {
++        /* id=249 */
++        "ESP_MARS",
++        "ESP_RC6",
++        "ESP_KAME_NULL",
++        "ESP_SERPENT",
++        "ESP_TWOFISH",
++        "ESP_ID254",
++        "ESP_ID255",
++};
++
++static enum_names esp_transformid_names_private_use = {
++        ESP_MARS,
++        ESP_ID255,
++        esp_transform_name_private_use,
++        NULL
++};
++
+ static const char *const esp_transform_name[] = {
+         "ESP_DES_IV64",              /* old DES */
+ 	"ESP_DES",
+@@ -319,27 +350,16 @@
+ 	"ESP_UNASSIGNED_ID17",
+ 	"ESP_AES_GCM_A",
+ 	"ESP_AES_GCM_B",
+-	"ESP_AES_GCM_C",
+-	"ESP_SEED_CBC",
+-	"ESP_CAMELLIA",
+-
++	"ESP_AES_GCM_C"
+ };
+ 
+-/*
+- * ipsec drafts suggest "high" ESP ids values for testing,
+- * assign generic ESP_ID<num> if not officially defined 
+- */
+-static const char *const esp_transform_name_high[] = {
+-	/* id=248 */	"ESP_ID248","ESP_MARS","ESP_RC6","ESP_ID251",
+-	/* id=252 */	"ESP_SERPENT", "ESP_TWOFISH", "ESP_ID254", "ESP_ID255",
+-	/* id=256 */	"ESP_ID256"
+-    };
+-
+-enum_names esp_transformid_names_high =
+-    { 248, 256, esp_transform_name_high, NULL };
++enum_names esp_transformid_names = {
++        ESP_DES_IV64,
++        ESP_AES_GCM_16,
++        esp_transform_name,
++        &esp_transformid_names_private_use
++};
+ 
+-enum_names esp_transformid_names =
+-    { ESP_DES_IV64, ESP_CAMELLIA, esp_transform_name, &esp_transformid_names_high };
+ 
+ /* IPCOMP transform values */
+ 
+@@ -638,13 +658,11 @@
+ 	"AUTH_ALGORITHM_HMAC_SHA2_256",
+ 	"AUTH_ALGORITHM_HMAC_SHA2_384",
+ 	"AUTH_ALGORITHM_HMAC_SHA2_512",
+-	"AUTH_ALGORITHM_HMAC_RIPEMD",
+-	"AUTH_ALGORITHM_AES_CBC",
+     };
+ 
+ enum_names
+     auth_alg_names =
+-	{ AUTH_ALGORITHM_NONE, AUTH_ALGORITHM_AES_CBC , auth_alg_name, NULL };
++	{ AUTH_ALGORITHM_NONE, AUTH_ALGORITHM_HMAC_SHA2_512 , auth_alg_name, NULL };
+ 
+ const char *const modecfg_cisco_attr_name[] = {
+         "CISCO_BANNER",
+@@ -1108,23 +1126,59 @@
+ 
+ 
+ /* Transform-type Encryption */
++static const char *const trans_type_encr_name_private_use2[] = {
++        "TWOFISH_CBC_SSH",      /* 65289 */
++};
++
++static const char *const trans_type_encr_name_private_use1[] = {
++        "SERPENT_CBC",  /* 65004 */
++        "TWOFISH_CBC",
++};
++
+ const char *const trans_type_encr_name[]={
+-    "des-iv64",
+-    "des",
+-    "3des",
+-    "rc5",
+-    "idea",
+-    "cast",
+-    "blowfish",
+-    "3idea",
+-    "des-iv32",
+-    "res10",
+-    "null",
+-    "aes-cbc",
+-    "aes-ctr",
++        "DES-IV64(obsoleted)",  /* 1*/
++        "DES(obsoleted)",
++        "3DES",
++        "RC5",
++        "IDEA",
++        "CAST",
++        "BLOWFISH(obsoleted)",
++        "3IDEA",
++        "DES-IV32(obsoleted)",
++        "RES10",
++        "NULL",
++        "AES_CBC",
++        "AES_CTR",
++        "AES_CCM_A",    /* AES-CCM_8 RFC 4309 */
++        "AES_CCM_B",    /* AES-CCM_12 */
++        "AES_CCM_C",    /* AES-CCM_16 */
++        "UNASSIGNED",
++        "AES_GCM_A",    /* AES-GCM_8 RFC 4106 */
++        "AES_GCM_B",    /* AES-GCM_12 */
++        "AES_GCM_C",    /* AES-GCM_16 */
++
++};
++
++static enum_names trans_type_encr_names_private_use2 = {
++	OAKLEY_TWOFISH_CBC_SSH,
++	OAKLEY_TWOFISH_CBC_SSH,
++	trans_type_encr_name_private_use2,
++	NULL
++};
++
++static enum_names trans_type_encr_names_private_use1 = {
++	OAKLEY_SERPENT_CBC,
++	OAKLEY_TWOFISH_CBC,
++	trans_type_encr_name_private_use1,
++	&trans_type_encr_names_private_use2
++};
++
++enum_names trans_type_encr_names = {
++	IKEv2_ENCR_DES_IV64,
++	IKEv2_ENCR_AES_GCM_16,
++	trans_type_encr_name,
++	&trans_type_encr_names_private_use1
+ };
+-enum_names trans_type_encr_names =
+-{ IKEv2_ENCR_DES_IV64, IKEv2_ENCR_AES_CTR, trans_type_encr_name, NULL};
+ 
+ /* Transform-type PRF */
+ const char *const trans_type_prf_name[]={
+diff -Naur openswan-2.6.32-orig/lib/libopenswan/kernel_alg.c openswan-2.6.32/lib/libopenswan/kernel_alg.c
+--- openswan-2.6.32-orig/lib/libopenswan/kernel_alg.c	2010-12-17 20:23:54.000000000 -0500
++++ openswan-2.6.32/lib/libopenswan/kernel_alg.c	2014-09-17 10:15:42.575000000 -0400
+@@ -108,7 +108,7 @@
+ int
+ kernel_alg_add(int satype, int exttype, const struct sadb_alg *sadb_alg)
+ {
+-	struct sadb_alg *alg_p=NULL;
++	struct sadb_alg *alg_p, tmp_alg;
+ 	int alg_id=sadb_alg->sadb_alg_id;
+ 
+ 	DBG(DBG_KLIPS, DBG_log("kernel_alg_add():"
+@@ -120,11 +120,6 @@
+ 	    return -1;
+ 	}
+ 
+-	/*
+-	DBG(DBG_KLIPS, DBG_log("kernel_alg_add(): assign *%p=*%p",
+-			alg_p, sadb_alg));
+-	*/
+-
+ 	/* 	This logic "mimics" KLIPS: first algo implementation will be used */
+ 	if (alg_p->sadb_alg_id) {
+ 		DBG(DBG_KLIPS, DBG_log("kernel_alg_add(): discarding already setup "
+@@ -132,58 +127,104 @@
+ 					satype, exttype, sadb_alg->sadb_alg_id));
+ 		return 0;
+ 	}
+-	*alg_p=*sadb_alg;
+-	return 1;
++	/*
++	 * The kernel PFKEY interface gives us options we do not want to
++	 * support. The kernel allows ESP_CAST with variable keysizes, and
++	 * we only want to support 128bit. The kernel allows ESP_DES, which
++	 * is simply too weak to be allowed. DES is also blocked via the parser
++	 */
++	tmp_alg = *sadb_alg;
++	switch (exttype) {
++	case SADB_EXT_SUPPORTED_ENCRYPT:
++		switch (satype) {
++		case SADB_SATYPE_ESP:
++			switch (alg_id) {
++			case ESP_CAST:
++				/* Overruling kernel - we only want to support 128 */
++				tmp_alg.sadb_alg_minbits = 128;
++				tmp_alg.sadb_alg_maxbits = 128;
++				break;
++			case ESP_DES:
++				DBG(DBG_KLIPS,
++					DBG_log("kernel_alg_add(): Ignoring alg_id=%d(%s) - too weak",
++						alg_id,
++						enum_name(&esp_transformid_names,
++							alg_id)));
++				return 0;
++			}
++			break;
++		}
++		break;
++	}
++
++	*alg_p = tmp_alg;
++ 	return 1;
+ }
+ 
+ err_t
+-kernel_alg_esp_enc_ok(int alg_id, unsigned int key_len, 
+-		      struct alg_info_esp *alg_info __attribute__((unused)))
++kernel_alg_esp_enc_ok(int alg_id, unsigned int key_len)
+ {
+-	struct sadb_alg *alg_p=NULL;
+ 	err_t ugh = NULL;
+ 
+-	/* 
+-	 * test #1: encrypt algo must be present 
+-	 */
+-	int ret=ESP_EALG_PRESENT(alg_id);
+-	if (!ret) goto out;
+-
+-	alg_p=&esp_ealg[alg_id];
+-	/* 
+-	 * test #2: if key_len specified, it must be in range 
++	/*
++	 * test #1: encrypt algo must be present
+ 	 */
+-	if ((key_len) && ((key_len < alg_p->sadb_alg_minbits) ||
+-			 (key_len > alg_p->sadb_alg_maxbits))) {
+-	  
+-	  ugh = builddiag("kernel_alg_db_add() key_len not in range: alg_id=%d, "
+-			  "key_len=%d, alg_minbits=%d, alg_maxbits=%d",
+-			  alg_id, key_len,
+-			  alg_p->sadb_alg_minbits,
+-			  alg_p->sadb_alg_maxbits);
+-	} 
+-
+-out:
+-	if (!ugh && alg_p != NULL) {
+-		DBG(DBG_KLIPS, 
+-			DBG_log("kernel_alg_esp_enc_ok(%d,%d): "
+-				"alg_id=%d, "
+-				"alg_ivlen=%d, alg_minbits=%d, alg_maxbits=%d, "
+-				"res=%d, ret=%d",
+-				alg_id, key_len,
+-				alg_p->sadb_alg_id,
+-				alg_p->sadb_alg_ivlen,
+-				alg_p->sadb_alg_minbits,
+-				alg_p->sadb_alg_maxbits,
+-				alg_p->sadb_alg_reserved,
+-				ret);
+-		   );
+-	} else {
+-		DBG(DBG_KLIPS, 
+-			DBG_log("kernel_alg_esp_enc_ok(%d,%d): NO",
++	if (!ESP_EALG_PRESENT(alg_id)) {
++		DBG(DBG_KLIPS,
++			DBG_log("kernel_alg_esp_enc_ok(%d,%d): alg not present in system",
+ 				alg_id, key_len);
+-		);
++			);
++		ugh = "esp alg not present in system";
++	} else {
++		struct sadb_alg *alg_p = &esp_ealg[alg_id];
++
++		passert(alg_p != NULL);
++		switch (alg_id) {
++		case ESP_AES_GCM_8:
++		case ESP_AES_GCM_12:
++		case ESP_AES_GCM_16:
++		case ESP_AES_CCM_8:
++		case ESP_AES_CCM_12:
++		case ESP_AES_CCM_16:
++		case ESP_AES_CTR:
++			if (key_len && (key_len != 128 && key_len != 192 &&
++				key_len != 256)) {
++				ugh = builddiag("kernel_alg_db_add() key_len is incorrect: alg_id=%d, key_len=%d, alg_minbits=%d, alg_maxbits=%d",
++						alg_id, key_len,
++						alg_p->sadb_alg_minbits,
++						alg_p->sadb_alg_maxbits);
++			}
++			break;
++		default:
++			/* old behaviour - not necc. correct */
++			if (key_len != 0 && (key_len < alg_p->sadb_alg_minbits
++				|| key_len > alg_p->sadb_alg_maxbits)) {
++				ugh = builddiag("kernel_alg_db_add() key_len not in range: alg_id=%d, key_len=%d, alg_minbits=%d, alg_maxbits=%d",
++					alg_id, key_len,
++					alg_p->sadb_alg_minbits,
++					alg_p->sadb_alg_maxbits);
++			}
++
++		}
++
++		if (ugh != NULL) {
++			DBG(DBG_KLIPS,
++				DBG_log("kernel_alg_esp_enc_ok(%d,%d): %s alg_id=%d, alg_ivlen=%d, alg_minbits=%d, alg_maxbits=%d, res=%d",
++					alg_id, key_len, ugh,
++					alg_p->sadb_alg_id,
++					alg_p->sadb_alg_ivlen,
++					alg_p->sadb_alg_minbits,
++					alg_p->sadb_alg_maxbits,
++					alg_p->sadb_alg_reserved);
++				);
++		} else {
++			DBG(DBG_KLIPS,
++				DBG_log("kernel_alg_esp_enc_ok(%d,%d): OK",
++					alg_id, key_len);
++				);
++		}
+ 	}
++
+ 	return ugh;
+ }
+ 
+diff -Naur openswan-2.6.32-orig/linux/include/openswan/ipsec_policy.h openswan-2.6.32/linux/include/openswan/ipsec_policy.h
+--- openswan-2.6.32-orig/linux/include/openswan/ipsec_policy.h	2010-12-17 20:23:54.000000000 -0500
++++ openswan-2.6.32/linux/include/openswan/ipsec_policy.h	2014-09-17 10:11:12.358000000 -0400
+@@ -83,8 +83,8 @@
+   AH_SHA2_384=6,
+   AH_SHA2_512=7,
+   AH_RIPEMD=8,
+-  AH__AES_XCBC_MAC=9,
+-  AH_RSA=10
++  AH_AES_XCBC=9,
++  AH_NULL=251
+ };
+ 
+ /* IPsec ESP transform values
+@@ -114,10 +114,14 @@
+   ESP_AES_GCM_8=18,
+   ESP_AES_GCM_12=19,
+   ESP_AES_GCM_16=20,
+-  ESP_SEED_CBC=21,
+-  ESP_CAMELLIA=22,
+-  ESP_NULL_AUTH_AES_GMAC=23 /* [RFC4543][Errata1821] */
+   /* 249-255 reserved for private use */
++  ESP_MARS = 249,
++  ESP_RC6 = 250,
++  ESP_KAME_NULL = 251,    /* kame? */
++  ESP_SERPENT = 252,
++  ESP_TWOFISH = 253,
++  ESP_ID254 = 254,
++  ESP_ID255 = 255,
+ };
+ 
+ /* IPCOMP transform values
+diff -Naur openswan-2.6.32-orig/programs/pluto/crypto.c openswan-2.6.32/programs/pluto/crypto.c
+--- openswan-2.6.32-orig/programs/pluto/crypto.c	2014-09-17 10:10:43.771000000 -0400
++++ openswan-2.6.32/programs/pluto/crypto.c	2014-09-17 10:11:12.359000000 -0400
+@@ -418,9 +418,89 @@
+ }
+ 
+ /*
+- * Local Variables:
+- * c-basic-offset:4
+- * c-style: pluto
+- * End:
++ * Return a required oakley or ipsec keysize or 0 if not required.
++ * The first parameter uses 0 for ESP, and anything above that for
++ * IKE major version
+  */
++int crypto_req_keysize(enum crk_proto ksproto, int algo)
++{
++	switch(ksproto) {
++	case CRK_IKEv2:
++		switch(algo) {
++		case IKEv2_ENCR_CAST:
++			return CAST_KEY_DEF_LEN;
++		case IKEv2_ENCR_AES_CBC:
++		case IKEv2_ENCR_AES_CTR:
++		case IKEv2_ENCR_AES_CCM_8:
++		case IKEv2_ENCR_AES_CCM_12:
++		case IKEv2_ENCR_AES_CCM_16:
++		case IKEv2_ENCR_AES_GCM_8:
++		case IKEv2_ENCR_AES_GCM_12:
++		case IKEv2_ENCR_AES_GCM_16:
++			return AES_KEY_DEF_LEN;
++		case IKEv2_ENCR_CAMELLIA_CTR:
++		case IKEv2_ENCR_CAMELLIA_CCM_A:
++		case IKEv2_ENCR_CAMELLIA_CCM_B:
++		case IKEv2_ENCR_CAMELLIA_CCM_C:
++			return CAMELLIA_KEY_DEF_LEN;
++		/* private use */
++		case IKEv2_ENCR_SERPENT_CBC:
++			return SERPENT_KEY_DEF_LEN;
++		case IKEv2_ENCR_TWOFISH_CBC:
++		case IKEv2_ENCR_TWOFISH_CBC_SSH: /* ?? */
++			return TWOFISH_KEY_DEF_LEN;
++		default:
++			return 0;
++		}
+ 
++	case CRK_IKEv1:
++		switch(algo) {
++		case OAKLEY_CAST_CBC:
++			return CAST_KEY_DEF_LEN;
++		case OAKLEY_AES_CBC:
++			return AES_KEY_DEF_LEN;
++		case OAKLEY_CAMELLIA_CBC:
++			return CAMELLIA_KEY_DEF_LEN;
++		/* private use */
++		case OAKLEY_SERPENT_CBC:
++			return SERPENT_KEY_DEF_LEN;
++		case OAKLEY_TWOFISH_CBC:
++		case OAKLEY_TWOFISH_CBC_SSH: /* ?? */
++			return TWOFISH_KEY_DEF_LEN;
++		default:
++			return 0;
++		}
++
++	case CRK_ESPorAH:
++		switch(algo) {
++		case ESP_CAST:
++			return CAST_KEY_DEF_LEN;
++		case ESP_AES:
++			return AES_KEY_DEF_LEN;
++		case ESP_AES_CTR:
++			return AES_CTR_KEY_DEF_LEN;
++		case ESP_AES_CCM_8:
++		case ESP_AES_CCM_12:
++		case ESP_AES_CCM_16:
++			return AES_CCM_KEY_DEF_LEN;
++		case ESP_AES_GCM_8:
++		case ESP_AES_GCM_12:
++		case ESP_AES_GCM_16:
++			return AES_GCM_KEY_DEF_LEN;
++#if 0
++		case ESP_CAMELLIA:
++			return CAMELLIA_KEY_DEF_LEN;
++#endif
++		/* private use */
++		case ESP_SERPENT:
++			return SERPENT_KEY_DEF_LEN;
++		case ESP_TWOFISH:
++			return TWOFISH_KEY_DEF_LEN;
++		default:
++			return 0;
++		}
++
++	default:
++		bad_case(ksproto);
++	}
++}
+diff -Naur openswan-2.6.32-orig/programs/pluto/crypto.h openswan-2.6.32/programs/pluto/crypto.h
+--- openswan-2.6.32-orig/programs/pluto/crypto.h	2010-12-17 20:23:54.000000000 -0500
++++ openswan-2.6.32/programs/pluto/crypto.h	2014-09-17 10:11:12.359000000 -0400
+@@ -157,6 +157,14 @@
+                                            , CK_ATTRIBUTE_TYPE operation, int keySize);
+ #endif
+ 
++enum crk_proto {
++        CRK_ESPorAH,
++        CRK_IKEv1,
++        CRK_IKEv2
++};
++
++extern int crypto_req_keysize(enum crk_proto ksproto, int algo);
++
+ #endif /* _CRYPTO_H */
+ 
+ /*
+diff -Naur openswan-2.6.32-orig/programs/pluto/ike_alg_aes.c openswan-2.6.32/programs/pluto/ike_alg_aes.c
+--- openswan-2.6.32-orig/programs/pluto/ike_alg_aes.c	2014-09-17 10:10:43.664000000 -0400
++++ openswan-2.6.32/programs/pluto/ike_alg_aes.c	2014-09-17 10:11:12.360000000 -0400
+@@ -23,10 +23,6 @@
+ #include "oswlog.h"
+ #endif
+ 
+-#define  AES_KEY_MIN_LEN	128
+-#define  AES_KEY_DEF_LEN	128
+-#define  AES_KEY_MAX_LEN	256
+-
+ static void
+ do_aes(u_int8_t *buf, size_t buf_len, u_int8_t *key, size_t key_size, u_int8_t *iv, bool enc)
+ {
+diff -Naur openswan-2.6.32-orig/programs/pluto/ike_alg.c openswan-2.6.32/programs/pluto/ike_alg.c
+--- openswan-2.6.32-orig/programs/pluto/ike_alg.c	2014-09-17 10:10:43.759000000 -0400
++++ openswan-2.6.32/programs/pluto/ike_alg.c	2014-09-17 10:11:12.360000000 -0400
+@@ -191,29 +191,11 @@
+ /*
+  * 	Main "raw" ike_alg list adding function
+  */
+-int
++void
+  ike_alg_add(struct ike_alg* a)
+ {
+-	int ret=0;
+-	const char *ugh="No error";
+-	if (a->algo_type > IKE_ALG_MAX)
+-	{
+-		ugh="Invalid algo_type";
+-		return_on(ret,-EINVAL);
+-	}
+-	if (ike_alg_find(a->algo_type, a->algo_id, 0))
+-	{
+-		ugh="Algorithm already exists";
+-		return_on(ret,-EEXIST);
+-	}
+-	if (ret==0) {
+-		a->algo_next=ike_alg_base[a->algo_type];
+-		ike_alg_base[a->algo_type]=a;
+-	}
+-return_out:
+-	if (ret) 
+-		openswan_log("ike_alg_add(): ERROR: %s", ugh);
+-	return ret;
++	a->algo_next=ike_alg_base[a->algo_type];
++	ike_alg_base[a->algo_type]=a;
+ }
+ 
+ /*
+@@ -252,6 +234,7 @@
+ 				"constants.c:oakley_hash_names  ",
+ 				hash_desc->common.algo_id);
+ 		alg_name="<NULL>";
++		return_on(ret, -EINVAL);
+ 	}
+ 	
+ 	if(hash_desc->common.name == NULL) {
+@@ -260,7 +243,7 @@
+ 
+ return_out:
+ 	if (ret==0)
+-		ret=ike_alg_add((struct ike_alg *)hash_desc);
++		ike_alg_add((struct ike_alg *)hash_desc);
+ 	openswan_log("ike_alg_register_hash(): Activating %s: %s (ret=%d)", 
+ 			alg_name, ret==0? "Ok" : "FAILED", ret);
+ 	return ret;
+@@ -275,14 +258,6 @@
+ 	const char *alg_name;
+ 	int ret=0;
+ 
+-#if OAKLEY_ENCRYPT_MAX < 255
+-	if (enc_desc->common.algo_id > OAKLEY_ENCRYPT_MAX) {
+-		plog ("ike_alg_register_enc(): enc alg=%d < max=%d\n",
+-				enc_desc->common.algo_id, OAKLEY_ENCRYPT_MAX);
+-		return_on(ret, -EINVAL);
+-	}
+-#endif
+-
+ 	/* XXX struct algo_aes_ccm_8 up to algo_aes_gcm_16, where
+ 	 * "commin.algo_id" is not defined need this officename fallback.
+ 	 * These are defined in kernel_netlink.c and need to move to
+@@ -292,18 +267,17 @@
+ 	if (!alg_name) {
+ 		alg_name = enc_desc->common.officname;
+ 		if (!alg_name) {
+-			plog ("ike_alg_register_enc(): WARNING: enc alg=%d not found in "
++			plog ("ike_alg_register_enc(): ERROR: enc alg=%d not found in "
+ 				"constants.c:oakley_enc_names  ",
+ 				enc_desc->common.algo_id);
+ 			alg_name="<NULL>";
++			return_on(ret, -EINVAL);
+ 		}
+ 	}
+-#if OAKLEY_ENCRYPT_MAX < 255
+ return_out:
+-#endif
+ 
+ 	if (ret==0)
+-		ret=ike_alg_add((struct ike_alg *)enc_desc);
++		ike_alg_add((struct ike_alg *)enc_desc);
+ 	openswan_log("ike_alg_register_enc(): Activating %s: %s (ret=%d)", 
+ 			alg_name, ret==0? "Ok" : "FAILED", ret);
+ 	return 0;
+diff -Naur openswan-2.6.32-orig/programs/pluto/ike_alg.h openswan-2.6.32/programs/pluto/ike_alg.h
+--- openswan-2.6.32-orig/programs/pluto/ike_alg.h	2014-09-17 10:10:43.771000000 -0400
++++ openswan-2.6.32/programs/pluto/ike_alg.h	2014-09-17 10:11:12.361000000 -0400
+@@ -52,9 +52,11 @@
+ void ike_alg_show_connection(struct connection *c, const char *instance);
+ 
+ #define IKE_EALG_FOR_EACH(a) \
+-	for(a=ike_alg_base[IKE_ALG_ENCRYPT];a;a=a->algo_next)
++	for ((a) = ike_alg_base[IKE_ALG_ENCRYPT]; (a) != NULL; (a) = (a)->algo_next)
++
+ #define IKE_HALG_FOR_EACH(a) \
+-	for(a=ike_alg_base[IKE_ALG_HASH];a;a=a->algo_next)
++	for ((a) = ike_alg_base[IKE_ALG_HASH]; (a) != NULL; (a) = (a)->algo_next)
++
+ bool ike_alg_enc_present(int ealg);
+ bool ike_alg_hash_present(int halg);
+ bool ike_alg_enc_ok(int ealg, unsigned key_len, struct alg_info_ike *alg_info_ike, const char **, char *, size_t);
+@@ -72,7 +74,7 @@
+ #define IKE_ALG_INTEG	2
+ #define IKE_ALG_MAX	3
+ extern struct ike_alg *ike_alg_base[IKE_ALG_MAX+1];
+-int ike_alg_add(struct ike_alg *);
++void ike_alg_add(struct ike_alg *);
+ int ike_alg_register_enc(struct encrypt_desc *e);
+ int ike_alg_register_hash(struct hash_desc *a);
+ struct ike_alg *ike_alg_find(unsigned algo_type
+diff -Naur openswan-2.6.32-orig/programs/pluto/ikev1_quick.c openswan-2.6.32/programs/pluto/ikev1_quick.c
+--- openswan-2.6.32-orig/programs/pluto/ikev1_quick.c	2014-09-17 10:10:43.622000000 -0400
++++ openswan-2.6.32/programs/pluto/ikev1_quick.c	2014-09-17 10:11:12.362000000 -0400
+@@ -1,5 +1,4 @@
+ /*
+- * IPsec IKEv1 DOI Quick Mode functions.
+  *
+  * Copyright (C) 1997 Angelos D. Keromytis.
+  * Copyright (C) 1998-2002  D. Hugh Redelmeier.
+@@ -217,6 +216,7 @@
+ 		needed_len = DES_CBC_BLOCK_SIZE * 3;
+ 		break;
+ 	    case ESP_AES:
++		/* no AES_CTR for IKEv1 */
+ 		needed_len = AES_CBC_BLOCK_SIZE;
+ 		/* if an attribute is set, then use that! */
+ 		if(st->st_esp.attrs.transattrs.enckeylen) {
+@@ -224,6 +224,48 @@
+ 		}
+ 		break;
+ 
++	    case ESP_TWOFISH:
++	    case ESP_SERPENT:
++		/* valid keysize enforced before we get here */
++		if (st->st_esp.attrs.transattrs.enckeylen) {
++			passert(st->st_esp.attrs.transattrs.enckeylen == 128 ||
++				st->st_esp.attrs.transattrs.enckeylen == 192 ||
++				st->st_esp.attrs.transattrs.enckeylen == 256);
++			needed_len = st->st_esp.attrs.transattrs.enckeylen / BITS_PER_BYTE;
++		} else {
++			/*
++			 * If no keylength set, pick mandatory to implement default
++			 * {CAMELLIA,TWOFISH,SERPENT}_DEF_KEY_LEN = 128
++			 */
++			needed_len = 128 / BITS_PER_BYTE;
++		}
++		break;
++
++	    case ESP_AES_GCM_8:
++	    case ESP_AES_GCM_12:
++	    case ESP_AES_GCM_16:
++		/* valid keysize enforced before we get here */
++		if (st->st_esp.attrs.transattrs.enckeylen) 
++			needed_len = st->st_esp.attrs.transattrs.enckeylen / BITS_PER_BYTE;
++		else
++			needed_len = AEAD_AES_KEY_MAX_LEN / BITS_PER_BYTE;
++		/* AES_GCM requires an extra AES_GCM_SALT_BYTES (4) bytes of salt */
++		needed_len += AES_GCM_SALT_BYTES;
++		break;
++	    case ESP_AES_CCM_8:
++	    case ESP_AES_CCM_12:
++	    case ESP_AES_CCM_16:
++		/* valid keysize enforced before we get here */
++		if (st->st_esp.attrs.transattrs.enckeylen) 
++			needed_len = st->st_esp.attrs.transattrs.enckeylen / BITS_PER_BYTE;
++		else
++			needed_len = AEAD_AES_KEY_MAX_LEN / BITS_PER_BYTE;
++		/* AES_GCM requires an extra AES_CCM_SALT_BYTES (3) bytes of salt */
++		needed_len += AES_CCM_SALT_BYTES;
++		break;
++
++
++
+ 	    default:
+ #ifdef KERNEL_ALG
+ 		if((needed_len=kernel_alg_esp_enc_keylen(pi->attrs.transattrs.encrypt))>0) {
+@@ -253,6 +295,16 @@
+ 	    case AUTH_ALGORITHM_HMAC_SHA1:
+ 		needed_len += HMAC_SHA1_KEY_LEN;
+ 		break;
++	    /* kernel_alg_ah_auth_ok / kernel_alg_ah_auth_keylen are broken */
++	    case AUTH_ALGORITHM_HMAC_SHA2_256:
++		needed_len += BYTES_FOR_BITS(256);
++		break;
++	    case AUTH_ALGORITHM_HMAC_SHA2_384:
++		needed_len += BYTES_FOR_BITS(384);
++		break;
++	    case AUTH_ALGORITHM_HMAC_SHA2_512:
++		needed_len += BYTES_FOR_BITS(512);
++		break;
+ 	    default:
+ #ifdef KERNEL_ALG
+ 	      if (kernel_alg_esp_auth_ok(pi->attrs.transattrs.integ_hash, NULL) == NULL) {
+@@ -260,9 +312,6 @@
+ 		  break;
+ 	      } 
+ #endif
+-	    case AUTH_ALGORITHM_DES_MAC:
+-		bad_case(pi->attrs.transattrs.integ_hash);
+-		break;
+ 	      
+ 	    }
+ 	    DBG(DBG_PARSING, DBG_log("compute_proto_keymat:"
+@@ -279,9 +328,20 @@
+ 	    case AH_SHA:
+ 		needed_len = HMAC_SHA1_KEY_LEN;
+ 		break;
++	/* kernel_alg_ah_auth_ok is broken */
++	    case AH_SHA2_256:
++		needed_len = BYTES_FOR_BITS(256);
++		break;
++	    case AH_SHA2_384:
++		needed_len = BYTES_FOR_BITS(384);
++		break;
++	    case AH_SHA2_512:
++		needed_len = BYTES_FOR_BITS(512);
++		break;
++
+ 	    default:
+ #ifdef KERNEL_ALG
+-		if (kernel_alg_ah_auth_ok(pi->attrs.transattrs.integ_hash, NULL)) {
++		if (kernel_alg_ah_auth_ok(pi->attrs.transattrs.integ_hash, NULL) == NULL) {
+ 		    needed_len += kernel_alg_ah_auth_keylen(pi->attrs.transattrs.integ_hash);
+ 		    break;
+ 		} 
+diff -Naur openswan-2.6.32-orig/programs/pluto/ikev2_child.c openswan-2.6.32/programs/pluto/ikev2_child.c
+--- openswan-2.6.32-orig/programs/pluto/ikev2_child.c	2014-09-17 10:10:43.524000000 -0400
++++ openswan-2.6.32/programs/pluto/ikev2_child.c	2014-09-17 10:11:12.363000000 -0400
+@@ -1279,9 +1279,11 @@
+ 			USE_TRANSPORT_MODE, &notifiy_data, outpbs);
+ 
+ 	   if (st1->st_esp.present == TRUE) {
+-		/*openswan supports only "esp" with ikev2 it seems, look at ikev2_parse_child_sa_body handling*/
+ 		st1->st_esp.attrs.encapsulation = ENCAPSULATION_MODE_TRANSPORT;
+ 	   }
++	   if (st1->st_ah.present == TRUE) {
++		st1->st_ah.attrs.encapsulation = ENCAPSULATION_MODE_TRANSPORT;
++	   }
+ 	   break;
+ 	   }
+ 	}
+diff -Naur openswan-2.6.32-orig/programs/pluto/ikev2_crypto.c openswan-2.6.32/programs/pluto/ikev2_crypto.c
+--- openswan-2.6.32-orig/programs/pluto/ikev2_crypto.c	2014-09-17 10:10:43.711000000 -0400
++++ openswan-2.6.32/programs/pluto/ikev2_crypto.c	2014-09-17 10:11:12.363000000 -0400
+@@ -56,7 +56,13 @@
+ 	struct v2prf_stuff childsacalc;
+ 	
+ 	chunk_t ikeymat,rkeymat;
+-	struct ipsec_proto_info *ipi = &st->st_esp;
++	struct ipsec_proto_info *ipi = 
++		st->st_esp.present? &st->st_esp :
++		st->st_ah.present? &st->st_ah :
++		NULL;
++
++	passert(ipi != NULL);    /* ESP or AH must be present */
++	passert(st->st_esp.present != st->st_ah.present);        /* only one */
+ 	
+ 	ipi->attrs.transattrs.ei=kernel_alg_esp_info(
+ 		ipi->attrs.transattrs.encrypt, 
+@@ -75,11 +81,35 @@
+ 	childsacalc.counter[0] = 1;
+ 	childsacalc.skeyseed = &st->st_skey_d;
+ 	
+-	st->st_esp.present = TRUE;
+-	st->st_esp.keymat_len = st->st_esp.attrs.transattrs.ei->enckeylen+
+-		st->st_esp.attrs.transattrs.ei->authkeylen;
+-	
+-	
++	switch (ipi->attrs.transattrs.ei->transid) { /* transid is same as encryptalg */
++	case IKEv2_ENCR_reserved:
++		/* AH */
++		ipi->keymat_len = ipi->attrs.transattrs.ei->authkeylen;
++		break;
++
++	case IKEv2_ENCR_AES_GCM_8:
++	case IKEv2_ENCR_AES_GCM_12:
++	case IKEv2_ENCR_AES_GCM_16:
++		/* aes_gcm does not use an integ (auth) algo - see RFC 4106 */
++		ipi->keymat_len = ipi->attrs.transattrs.ei->enckeylen +
++			AES_GCM_SALT_BYTES;
++		break;
++
++	case IKEv2_ENCR_AES_CCM_8:
++	case IKEv2_ENCR_AES_CCM_12:
++	case IKEv2_ENCR_AES_CCM_16:
++		/* aes_ccm does not use an integ (auth) algo - see RFC 4309 */
++		ipi->keymat_len = ipi->attrs.transattrs.ei->enckeylen +
++			AES_CCM_SALT_BYTES;
++		break;
++
++	default:
++		/* ordinary ESP */
++		ipi->keymat_len = ipi->attrs.transattrs.ei->enckeylen +
++			ipi->attrs.transattrs.ei->authkeylen;
++		break;
++	}
++
+ /*
+  *
+  * Keying material MUST be taken from the expanded KEYMAT in the
+@@ -98,10 +128,10 @@
+  *
+  */
+ 	
+-	v2genbytes(&ikeymat, st->st_esp.keymat_len
++	v2genbytes(&ikeymat, ipi->keymat_len
+ 		   , "initiator keys", &childsacalc);
+ 
+-	v2genbytes(&rkeymat, st->st_esp.keymat_len
++	v2genbytes(&rkeymat, ipi->keymat_len
+ 		   , "responder keys", &childsacalc);
+ 
+ 	/* This should really be role == INITIATOR, but then our keys are
+@@ -117,15 +147,15 @@
+ 		DBG_dump_chunk("our  keymat", ikeymat);
+ 		DBG_dump_chunk("peer keymat", rkeymat);
+ 	    );
+-	    st->st_esp.our_keymat = ikeymat.ptr;
+-	    st->st_esp.peer_keymat= rkeymat.ptr;
++	    ipi->our_keymat = ikeymat.ptr;
++	    ipi->peer_keymat= rkeymat.ptr;
+ 	} else {
+ 	    DBG(DBG_CRYPT,
+ 		DBG_dump_chunk("our  keymat", rkeymat);
+ 		DBG_dump_chunk("peer keymat", ikeymat);
+ 	    );
+-	    st->st_esp.peer_keymat= ikeymat.ptr;
+-	    st->st_esp.our_keymat = rkeymat.ptr;
++	    ipi->peer_keymat= ikeymat.ptr;
++	    ipi->our_keymat = rkeymat.ptr;
+ 	}
+ 	
+ }
+diff -Naur openswan-2.6.32-orig/programs/pluto/ikev2_parent.c openswan-2.6.32/programs/pluto/ikev2_parent.c
+--- openswan-2.6.32-orig/programs/pluto/ikev2_parent.c	2014-09-17 10:10:43.804000000 -0400
++++ openswan-2.6.32/programs/pluto/ikev2_parent.c	2014-09-17 10:11:12.364000000 -0400
+@@ -2089,8 +2089,10 @@
+ 			DBG(DBG_CONTROLMORE,
+ 			DBG_log("Initiator policy is transport, responder sends USE_TRANSPORT_MODE, setting CHILD SA to transport mode"));
+ 			if (st->st_esp.present == TRUE) { 
+-			/*openswan supports only "esp" with ikev2 it seems, look at ikev2_parse_child_sa_body handling*/
+-			st->st_esp.attrs.encapsulation = ENCAPSULATION_MODE_TRANSPORT;
++				st->st_esp.attrs.encapsulation = ENCAPSULATION_MODE_TRANSPORT;
++			}
++			if (st->st_ah.present == TRUE) { 
++				st->st_ah.attrs.encapsulation = ENCAPSULATION_MODE_TRANSPORT;
+ 			}
+ 		}
+ 	    }
+diff -Naur openswan-2.6.32-orig/programs/pluto/kernel.c openswan-2.6.32/programs/pluto/kernel.c
+--- openswan-2.6.32-orig/programs/pluto/kernel.c	2014-09-17 10:10:43.714000000 -0400
++++ openswan-2.6.32/programs/pluto/kernel.c	2014-09-17 10:11:12.366000000 -0400
+@@ -1605,47 +1605,49 @@
+         const struct esp_info *ei;
+         u_int16_t key_len;
+ 
+-        static const struct esp_info esp_info[] = {
+-            { FALSE, ESP_NULL, AUTH_ALGORITHM_HMAC_MD5,
+-                0, HMAC_MD5_KEY_LEN,
+-                SADB_EALG_NULL, SADB_AALG_MD5HMAC },
+-            { FALSE, ESP_NULL, AUTH_ALGORITHM_HMAC_SHA1,
+-                0, HMAC_SHA1_KEY_LEN,
+-                SADB_EALG_NULL, SADB_AALG_SHA1HMAC },
+-
+-            { FALSE, ESP_DES, AUTH_ALGORITHM_NONE,
+-                DES_CBC_BLOCK_SIZE, 0,
+-                SADB_EALG_DESCBC, SADB_AALG_NONE },
+-            { FALSE, ESP_DES, AUTH_ALGORITHM_HMAC_MD5,
+-                DES_CBC_BLOCK_SIZE, HMAC_MD5_KEY_LEN,
+-                SADB_EALG_DESCBC, SADB_AALG_MD5HMAC },
+-            { FALSE, ESP_DES, AUTH_ALGORITHM_HMAC_SHA1,
+-                DES_CBC_BLOCK_SIZE,
+-                HMAC_SHA1_KEY_LEN, SADB_EALG_DESCBC, SADB_AALG_SHA1HMAC },
+-
+-            { FALSE, ESP_3DES, AUTH_ALGORITHM_NONE,
+-                DES_CBC_BLOCK_SIZE * 3, 0,
+-                SADB_EALG_3DESCBC, SADB_AALG_NONE },
+-            { FALSE, ESP_3DES, AUTH_ALGORITHM_HMAC_MD5,
+-                DES_CBC_BLOCK_SIZE * 3, HMAC_MD5_KEY_LEN,
+-                SADB_EALG_3DESCBC, SADB_AALG_MD5HMAC },
+-            { FALSE, ESP_3DES, AUTH_ALGORITHM_HMAC_SHA1,
+-                DES_CBC_BLOCK_SIZE * 3, HMAC_SHA1_KEY_LEN,
+-                SADB_EALG_3DESCBC, SADB_AALG_SHA1HMAC },
+-
+-            { FALSE, ESP_AES, AUTH_ALGORITHM_NONE,
+-                AES_CBC_BLOCK_SIZE, 0,
+-                SADB_X_EALG_AESCBC, SADB_AALG_NONE },
+-            { FALSE, ESP_AES, AUTH_ALGORITHM_HMAC_MD5,
+-                AES_CBC_BLOCK_SIZE, HMAC_MD5_KEY_LEN,
+-                SADB_X_EALG_AESCBC, SADB_AALG_MD5HMAC },
+-            { FALSE, ESP_AES, AUTH_ALGORITHM_HMAC_SHA1,
+-                AES_CBC_BLOCK_SIZE, HMAC_SHA1_KEY_LEN,
+-                SADB_X_EALG_AESCBC, SADB_AALG_SHA1HMAC },
+-        };
+-	/* static const int esp_max = elemsof(esp_info); */
+-	/* int esp_count; */
+ 
++		static const struct esp_info esp_info[] = {
++			{ FALSE, ESP_NULL, AUTH_ALGORITHM_HMAC_MD5,
++			  0, HMAC_MD5_KEY_LEN,
++			  SADB_EALG_NULL, SADB_AALG_MD5HMAC },
++			{ FALSE, ESP_NULL, AUTH_ALGORITHM_HMAC_SHA1,
++			  0, HMAC_SHA1_KEY_LEN,
++			  SADB_EALG_NULL, SADB_AALG_SHA1HMAC },
++#if 0
++			{ FALSE, ESP_DES, AUTH_ALGORITHM_NONE,
++			  DES_CBC_BLOCK_SIZE, 0,
++			  SADB_EALG_DESCBC, SADB_AALG_NONE },
++			{ FALSE, ESP_DES, AUTH_ALGORITHM_HMAC_MD5,
++			  DES_CBC_BLOCK_SIZE, HMAC_MD5_KEY_LEN,
++			  SADB_EALG_DESCBC, SADB_AALG_MD5HMAC },
++			{ FALSE, ESP_DES, AUTH_ALGORITHM_HMAC_SHA1,
++			  DES_CBC_BLOCK_SIZE,
++			  HMAC_SHA1_KEY_LEN, SADB_EALG_DESCBC,
++			  SADB_AALG_SHA1HMAC },
++#endif
++			{ FALSE, ESP_3DES, AUTH_ALGORITHM_NONE,
++			  DES_CBC_BLOCK_SIZE * 3, 0,
++			  SADB_EALG_3DESCBC, SADB_AALG_NONE },
++			{ FALSE, ESP_3DES, AUTH_ALGORITHM_HMAC_MD5,
++			  DES_CBC_BLOCK_SIZE * 3, HMAC_MD5_KEY_LEN,
++			  SADB_EALG_3DESCBC, SADB_AALG_MD5HMAC },
++			{ FALSE, ESP_3DES, AUTH_ALGORITHM_HMAC_SHA1,
++			  DES_CBC_BLOCK_SIZE * 3, HMAC_SHA1_KEY_LEN,
++			  SADB_EALG_3DESCBC, SADB_AALG_SHA1HMAC },
++
++			{ FALSE, ESP_AES, AUTH_ALGORITHM_NONE,
++			  AES_CBC_BLOCK_SIZE, 0,
++			  SADB_X_EALG_AESCBC, SADB_AALG_NONE },
++			{ FALSE, ESP_AES, AUTH_ALGORITHM_HMAC_MD5,
++			  AES_CBC_BLOCK_SIZE, HMAC_MD5_KEY_LEN,
++			  SADB_X_EALG_AESCBC, SADB_AALG_MD5HMAC },
++			{ FALSE, ESP_AES, AUTH_ALGORITHM_HMAC_SHA1,
++			  AES_CBC_BLOCK_SIZE, HMAC_SHA1_KEY_LEN,
++			  SADB_X_EALG_AESCBC, SADB_AALG_SHA1HMAC },
++
++		};
++		/* static const int esp_max = elemsof(esp_info); */
++		/* int esp_count; */
+ #ifdef NAT_TRAVERSAL
+         u_int8_t natt_type = 0;
+         u_int16_t natt_sport = 0, natt_dport = 0;
+@@ -1734,22 +1736,34 @@
+         } else {
+                 key_len = ei->enckeylen;
+         }
+-        /* Grrrrr.... f*cking 7 bits jurassic algos  */
+-
+-        /* 168 bits in kernel, need 192 bits for keymat_len */
+-        if (ei->transid == ESP_3DES && key_len == 21) 
+-                key_len = 24;
+-
+-        /* 56 bits in kernel, need 64 bits for keymat_len */
+-        if (ei->transid == ESP_DES && key_len == 7) 
+-                key_len = 8;
+-
+-        /* divide up keying material */
+-        /* passert(st->st_esp.keymat_len == ei->enckeylen + ei->authkeylen); */
+-	if(st->st_esp.keymat_len != key_len + ei->authkeylen)
+-	    DBG_log("keymat_len=%d key_len=%d authkeylen=%d",
+-		    st->st_esp.keymat_len, (int)key_len, (int)ei->authkeylen);
+-        passert(st->st_esp.keymat_len == (key_len + ei->authkeylen));
++        /* Fixup key lengths for special cases */
++	switch (ei->transid) {
++		case ESP_3DES:
++			/* Grrrrr.... f*cking 7 bits jurassic algos  */
++			/* 168 bits in kernel, need 192 bits for keymat_len */
++			if (key_len == 21)
++				key_len = 24;
++			break;
++		case ESP_DES:
++			/* Grrrrr.... f*cking 7 bits jurassic algos  */
++			/* 56 bits in kernel, need 64 bits for keymat_len */
++			if (key_len == 7)
++				key_len = 8;
++			break;
++		case IKEv2_ENCR_AES_GCM_8:
++		case IKEv2_ENCR_AES_GCM_12:
++		case IKEv2_ENCR_AES_GCM_16:
++			/* keymat contains 4 bytes of salt */
++			key_len += AES_GCM_SALT_BYTES;
++			break;
++		case IKEv2_ENCR_AES_CCM_8:
++		case IKEv2_ENCR_AES_CCM_12:
++		case IKEv2_ENCR_AES_CCM_16:
++			/* keymat contains 4 bytes of salt */
++			key_len += AES_CCM_SALT_BYTES;
++			break;
++		}
++	passert(st->st_esp.keymat_len == key_len + ei->authkeylen);
+ 
+         set_text_said(text_said, &dst.addr, esp_spi, SA_ESP);
+ 
+@@ -1775,13 +1789,17 @@
+ 		   	goto fail;
+ 			}
+ 		}
++
++        /* divide up keying material */
++        said_next->enckey = esp_dst_keymat;
++        said_next->enckeylen = key_len;
++        said_next->encalg = ei->encryptalg;
++
++        said_next->authkey = esp_dst_keymat + key_len;
+         said_next->authkeylen = ei->authkeylen;
+         /* said_next->authkey = esp_dst_keymat + ei->enckeylen; */
+-        said_next->authkey = esp_dst_keymat + key_len;
+-        said_next->encalg = ei->encryptalg;
+         /* said_next->enckeylen = ei->enckeylen; */
+-        said_next->enckeylen = key_len;
+-        said_next->enckey = esp_dst_keymat;
++
+         said_next->encapsulation = encapsulation;
+         said_next->reqid = c->spd.reqid + 1;
+ 
+@@ -1887,10 +1905,20 @@
+             authalg = SADB_AALG_SHA1HMAC;
+             break;
+ 
+-        case AUTH_ALGORITHM_KPDK:
+-        case AUTH_ALGORITHM_DES_MAC:
++	case AUTH_ALGORITHM_HMAC_SHA2_256:
++	    authalg = SADB_X_AALG_SHA2_256HMAC;
++	    break;
++
++	case AUTH_ALGORITHM_HMAC_SHA2_384:
++	    authalg = SADB_X_AALG_SHA2_384HMAC;
++	    break;
++
++	case AUTH_ALGORITHM_HMAC_SHA2_512:
++	    authalg = SADB_X_AALG_SHA2_512HMAC;
++	    break;
++
+         default:
+-            loglog(RC_LOG_SERIOUS, "%s not implemented yet"
++            loglog(RC_LOG_SERIOUS, "%s not implemented"
+                 , enum_show(&auth_alg_names, st->st_ah.attrs.transattrs.integ_hash));
+             goto fail;
+         }
+diff -Naur openswan-2.6.32-orig/programs/pluto/kernel_netlink.c openswan-2.6.32/programs/pluto/kernel_netlink.c
+--- openswan-2.6.32-orig/programs/pluto/kernel_netlink.c	2014-09-17 10:10:43.775000000 -0400
++++ openswan-2.6.32/programs/pluto/kernel_netlink.c	2014-09-17 10:11:12.367000000 -0400
+@@ -145,22 +145,27 @@
+ 	{ SADB_AALG_SHA1HMAC, "sha1" },
+ 	{ SADB_X_AALG_SHA2_256HMAC, "sha256" },
+ 	{ SADB_X_AALG_SHA2_256HMAC_TRUNCBUG, "hmac(sha256)" },
+-	{ SADB_X_AALG_SHA2_384HMAC, "sha384" },
+-	{ SADB_X_AALG_SHA2_512HMAC, "sha512" },
+-	{ SADB_X_AALG_RIPEMD160HMAC, "ripemd160" },
++	{ SADB_X_AALG_SHA2_384HMAC, "hmac(sha384)" },
++	{ SADB_X_AALG_SHA2_512HMAC, "hmac(sha512)" },
++	
++	
++	/* * GMAC's not supported by Linux kernel yet */
+ 	{ 0, sparse_end }
+ };
+ 
+ /** Encryption algs */
+ static sparse_names ealg_list = {
+ 	{ SADB_EALG_NULL, "cipher_null" },
+-	{ SADB_EALG_DESCBC, "des" },
++	/* { SADB_EALG_DESCBC, "des" }, obsoleted */
+ 	{ SADB_EALG_3DESCBC, "des3_ede" },
+-	{ SADB_X_EALG_CASTCBC, "cast128" },
++	{ SADB_X_EALG_CASTCBC, "cast5" },
+ 	{ SADB_X_EALG_BLOWFISHCBC, "blowfish" },
+ 	{ SADB_X_EALG_AESCBC, "aes" },
+-	{ SADB_X_EALG_AESCTR, "ctr(aes)" },
+-	{ SADB_X_EALG_CAMELLIACBC, "cbc(camellia)" },
++	{ SADB_X_EALG_AESCTR, "rfc3686(ctr(aes))" },
++	/* 252 draft-ietf-ipsec-ciph-aes-cbc-00 */
++	{ SADB_X_EALG_SERPENTCBC, "serpent" },
++	/* 253 draft-ietf-ipsec-ciph-aes-cbc-00 */
++	{ SADB_X_EALG_TWOFISHCBC, "twofish" },
+ 	{ 0, sparse_end }
+ };
+ 
+@@ -904,6 +909,8 @@
+     if (sa->authkeylen)
+     {
+ 	const char *name;
++	struct xfrm_algo_auth algo;
++	struct xfrm_algo algo_old;
+ 
+ 	name = sparse_name(aalg_list, sa->authalg);
+ 	if (!name) {
+@@ -918,35 +925,57 @@
+ 	 * an earlier draft. The kernel then introduced a new struct xfrm_algo_auth to
+ 	 * replace struct xfrm_algo to deal with this 
+ 	 */
+-	if(sa->authalg == AUTH_ALGORITHM_HMAC_SHA2_256_TRUNCBUG) {
+-	struct xfrm_algo_auth algo;
+-	DBG(DBG_NETKEY, DBG_log("  using new struct xfrm_algo_auth for XFRM message with explicit truncation for sha2_256"));
+-	algo.alg_key_len = sa->authkeylen * BITS_PER_BYTE;
+-	algo.alg_trunc_len = 128;
+-	attr->rta_type = XFRMA_ALG_AUTH_TRUNC;
+-	attr->rta_len = RTA_LENGTH(sizeof(algo) + sa->authkeylen);
+-	sa->authalg = AUTH_ALGORITHM_HMAC_SHA2_256; /* fixup to the real number, not our private number */
+-
+-	strcpy(algo.alg_name, name);
+-	memcpy(RTA_DATA(attr), &algo, sizeof(algo));
+-	memcpy((char *)RTA_DATA(attr) + sizeof(algo), sa->authkey
+-	    , sa->authkeylen);
+-
+-	req.n.nlmsg_len += attr->rta_len;
+-	attr = (struct rtattr *)((char *)attr + attr->rta_len);
+-	} else {
+-	struct xfrm_algo algo;
+-	DBG(DBG_NETKEY, DBG_log("  using old struct xfrm_algo for XFRM message"));
+-	algo.alg_key_len = sa->authkeylen * BITS_PER_BYTE;
+-	attr->rta_type = XFRMA_ALG_AUTH;
+-	attr->rta_len = RTA_LENGTH(sizeof(algo) + sa->authkeylen);
+-	strcpy(algo.alg_name, name);
+-	memcpy(RTA_DATA(attr), &algo, sizeof(algo));
+-	memcpy((char *)RTA_DATA(attr) + sizeof(algo), sa->authkey
+-	    , sa->authkeylen);
+-
+-	req.n.nlmsg_len += attr->rta_len;
+-	attr = (struct rtattr *)((char *)attr + attr->rta_len);
++	switch (sa->authalg)
++	{
++	case AUTH_ALGORITHM_HMAC_SHA2_256_TRUNCBUG:
++	case AUTH_ALGORITHM_HMAC_SHA2_256:
++	case AUTH_ALGORITHM_HMAC_SHA2_384:
++	case AUTH_ALGORITHM_HMAC_SHA2_512:
++
++		DBG(DBG_NETKEY, DBG_log("  using new struct xfrm_algo_auth for XFRM message with sha2 family"));
++		algo.alg_key_len = sa->authkeylen * BITS_PER_BYTE;
++		switch (sa->authalg)
++		{
++		case AUTH_ALGORITHM_HMAC_SHA2_256_TRUNCBUG:
++			algo.alg_trunc_len = 96;
++			/* fixup to the real number, not our private number */
++			sa->authalg = AUTH_ALGORITHM_HMAC_SHA2_256;
++			break;
++		case AUTH_ALGORITHM_HMAC_SHA2_256:
++			algo.alg_trunc_len = 128;
++			break;
++		case AUTH_ALGORITHM_HMAC_SHA2_384:
++			algo.alg_trunc_len = 192;
++			break;
++		case AUTH_ALGORITHM_HMAC_SHA2_512:
++			algo.alg_trunc_len = 256;
++			break;
++		}
++		attr->rta_type = XFRMA_ALG_AUTH_TRUNC;
++		attr->rta_len = RTA_LENGTH(sizeof(algo) + sa->authkeylen);
++		strcpy(algo.alg_name, name);
++		memcpy(RTA_DATA(attr), &algo, sizeof(algo));
++		memcpy((char *)RTA_DATA(attr) + sizeof(algo), sa->authkey
++	    		, sa->authkeylen);
++
++		req.n.nlmsg_len += attr->rta_len;
++		attr = (struct rtattr *)((char *)attr + attr->rta_len);
++		break;
++
++	default:
++
++		DBG(DBG_NETKEY, DBG_log("  using old struct xfrm_algo for XFRM message with sa->authalg=%d", sa->authalg));
++		algo_old.alg_key_len = sa->authkeylen * BITS_PER_BYTE;
++		attr->rta_type = XFRMA_ALG_AUTH;
++		attr->rta_len = RTA_LENGTH(sizeof(algo_old) + sa->authkeylen);
++		strcpy(algo_old.alg_name, name);
++		memcpy(RTA_DATA(attr), &algo_old, sizeof(algo_old));
++		memcpy((char *)RTA_DATA(attr) + sizeof(algo_old), sa->authkey
++		    , sa->authkeylen);
++
++		req.n.nlmsg_len += attr->rta_len;
++		attr = (struct rtattr *)((char *)attr + attr->rta_len);
++		break;
+ 	}
+     }
+ 
+@@ -1093,11 +1122,6 @@
+     return send_netlink_msg(&req.n, NULL, 0, "Del SA", sa->text_said);
+ }
+ 
+-/* XXX Move these elsewhere */
+-#define  AES_KEY_MIN_LEN       128
+-#define  AES_KEY_DEF_LEN       128
+-#define  AES_KEY_MAX_LEN       256
+-
+ struct encrypt_desc algo_aes_ccm_8 =
+ {
+ 	common: {
+@@ -1107,9 +1131,9 @@
+ 	  algo_v2id:    IKEv2_ENCR_AES_CCM_8,
+ 	  algo_next:    NULL, },
+ 	enc_blocksize:  AES_CBC_BLOCK_SIZE,
+-	keyminlen:      AES_KEY_MIN_LEN + 3,
+-	keydeflen:      AES_KEY_DEF_LEN + 3,
+-	keymaxlen:      AES_KEY_MAX_LEN + 3,
++	keyminlen:      AES_KEY_MIN_LEN,
++	keydeflen:      AES_KEY_DEF_LEN,
++	keymaxlen:      AES_KEY_MAX_LEN,
+ };
+ 
+ struct encrypt_desc algo_aes_ccm_12 =
+@@ -1121,9 +1145,9 @@
+ 	  algo_v2id:    IKEv2_ENCR_AES_CCM_12,
+ 	  algo_next:    NULL, },
+ 	enc_blocksize:  AES_CBC_BLOCK_SIZE,
+-	keyminlen:      AES_KEY_MIN_LEN + 3,
+-	keydeflen:      AES_KEY_DEF_LEN + 3,
+-	keymaxlen:      AES_KEY_MAX_LEN + 3,
++	keyminlen:      AES_KEY_MIN_LEN,
++	keydeflen:      AES_KEY_DEF_LEN,
++	keymaxlen:      AES_KEY_MAX_LEN,
+ };
+ 
+ struct encrypt_desc algo_aes_ccm_16 =
+@@ -1135,9 +1159,9 @@
+ 	  algo_v2id:    IKEv2_ENCR_AES_CCM_16,
+ 	  algo_next: 	NULL, },
+ 	enc_blocksize: 	AES_CBC_BLOCK_SIZE,
+-	keyminlen: 	AES_KEY_MIN_LEN + 3,
+-	keydeflen: 	AES_KEY_DEF_LEN + 3,
+-	keymaxlen: 	AES_KEY_MAX_LEN + 3,
++	keyminlen: 	AES_KEY_MIN_LEN,
++	keydeflen: 	AES_KEY_DEF_LEN,
++	keymaxlen: 	AES_KEY_MAX_LEN,
+ };
+ 
+ struct encrypt_desc algo_aes_gcm_8 =
+@@ -1149,9 +1173,10 @@
+ 	  algo_v2id:    IKEv2_ENCR_AES_GCM_8,
+ 	  algo_next: 	NULL, },
+ 	enc_blocksize: 	AES_CBC_BLOCK_SIZE,
+-	keyminlen: 	AES_KEY_MIN_LEN + 3,
+-	keydeflen: 	AES_KEY_DEF_LEN + 3,
+-	keymaxlen: 	AES_KEY_MAX_LEN + 3,
++	/* Only 128, 192 and 256 are supported (32 bits KEYMAT for salt not included) */
++	keyminlen: 	AES_KEY_MIN_LEN,
++	keydeflen: 	AES_KEY_DEF_LEN,
++	keymaxlen: 	AES_KEY_MAX_LEN,
+ };
+ 
+ struct encrypt_desc algo_aes_gcm_12 =
+@@ -1163,9 +1188,9 @@
+ 	  algo_v2id:    IKEv2_ENCR_AES_GCM_12,
+ 	  algo_next: 	NULL, },
+ 	enc_blocksize: 	AES_CBC_BLOCK_SIZE,
+-	keyminlen: 	AES_KEY_MIN_LEN + 3,
+-	keydeflen: 	AES_KEY_DEF_LEN + 3,
+-	keymaxlen: 	AES_KEY_MAX_LEN + 3,
++	keyminlen: 	AES_KEY_MIN_LEN,
++	keydeflen: 	AES_KEY_DEF_LEN,
++	keymaxlen: 	AES_KEY_MAX_LEN,
+ };
+ 
+ struct encrypt_desc algo_aes_gcm_16 =
+@@ -1177,9 +1202,9 @@
+ 	  algo_v2id:    IKEv2_ENCR_AES_GCM_16,
+ 	  algo_next: 	NULL, },
+ 	enc_blocksize: 	AES_CBC_BLOCK_SIZE,
+-	keyminlen: 	AES_KEY_MIN_LEN + 3,
+-	keydeflen: 	AES_KEY_DEF_LEN + 3,
+-	keymaxlen: 	AES_KEY_MAX_LEN + 3,
++	keyminlen: 	AES_KEY_MIN_LEN,
++	keydeflen: 	AES_KEY_DEF_LEN,
++	keymaxlen: 	AES_KEY_MAX_LEN,
+ };
+ 
+ static void
+@@ -1187,20 +1212,41 @@
+ {
+ 	struct sadb_alg alg;
+ 
++	alg.sadb_alg_reserved = 0;
++
+ 	alg.sadb_alg_ivlen = 8;
+ 	alg.sadb_alg_minbits = 128;
+ 	alg.sadb_alg_maxbits = 256;
+-
+ 	alg.sadb_alg_id = SADB_X_EALG_AES_GCM_ICV8;
+ 	kernel_alg_add(SADB_SATYPE_ESP, SADB_EXT_SUPPORTED_ENCRYPT, &alg);
++
++	alg.sadb_alg_ivlen = 12;
++	alg.sadb_alg_minbits = 128;
++	alg.sadb_alg_maxbits = 256;
+ 	alg.sadb_alg_id = SADB_X_EALG_AES_GCM_ICV12;
+ 	kernel_alg_add(SADB_SATYPE_ESP, SADB_EXT_SUPPORTED_ENCRYPT, &alg);
++
++	alg.sadb_alg_ivlen = 16;
++	alg.sadb_alg_minbits = 128;
++	alg.sadb_alg_maxbits = 256;
+ 	alg.sadb_alg_id = SADB_X_EALG_AES_GCM_ICV16;
+ 	kernel_alg_add(SADB_SATYPE_ESP, SADB_EXT_SUPPORTED_ENCRYPT, &alg);
++
++	alg.sadb_alg_ivlen = 8;
++	alg.sadb_alg_minbits = 128;
++	alg.sadb_alg_maxbits = 256;
+ 	alg.sadb_alg_id = SADB_X_EALG_AES_CCM_ICV8;
+ 	kernel_alg_add(SADB_SATYPE_ESP, SADB_EXT_SUPPORTED_ENCRYPT, &alg);
++
++	alg.sadb_alg_ivlen = 12;
++	alg.sadb_alg_minbits = 128;
++	alg.sadb_alg_maxbits = 256;
+ 	alg.sadb_alg_id = SADB_X_EALG_AES_CCM_ICV12;
+ 	kernel_alg_add(SADB_SATYPE_ESP, SADB_EXT_SUPPORTED_ENCRYPT, &alg);
++
++	alg.sadb_alg_ivlen = 16;
++	alg.sadb_alg_minbits = 128;
++	alg.sadb_alg_maxbits = 256;
+ 	alg.sadb_alg_id = SADB_X_EALG_AES_CCM_ICV16;
+ 	kernel_alg_add(SADB_SATYPE_ESP, SADB_EXT_SUPPORTED_ENCRYPT, &alg);
+ 
+@@ -1210,6 +1256,9 @@
+ 	ike_alg_register_enc(&algo_aes_gcm_8);
+ 	ike_alg_register_enc(&algo_aes_gcm_12);
+ 	ike_alg_register_enc(&algo_aes_gcm_16);
++
++	DBG(DBG_CONTROLMORE,
++		DBG_log("Registered AEAD AES CCM/GCM algorithms"));
+ }
+ 
+ static void
+diff -Naur openswan-2.6.32-orig/programs/pluto/plutoalg.c openswan-2.6.32/programs/pluto/plutoalg.c
+--- openswan-2.6.32-orig/programs/pluto/plutoalg.c	2014-09-17 10:10:43.760000000 -0400
++++ openswan-2.6.32/programs/pluto/plutoalg.c	2014-09-17 10:11:12.368000000 -0400
+@@ -203,7 +203,7 @@
+ 	buf[0]=0; strncat(buf, "none", buflen);
+ 
+ 	ALG_INFO_ESP_FOREACH(alg_info, esp_info, cnt) {
+-	    if (kernel_alg_esp_enc_ok(esp_info->esp_ealg_id, 0, NULL)) {
++	    if (kernel_alg_esp_enc_ok(esp_info->esp_ealg_id, 0)) {
+ 		DBG_log("esp algid=%d not available", esp_info->esp_ealg_id);
+ 		continue;
+ 	    }
+@@ -408,7 +408,6 @@
+         case ESP_DES:
+         case ESP_3DES:
+         case ESP_NULL:
+-        case ESP_CAST:
+             break;
+         default:
+             if (!esp_info->esp_ealg_keylen) {
+@@ -475,8 +474,30 @@
+ 	    if (esp_info->esp_ealg_keylen) {
+ 		db_attr_add_values(db_ctx, 
+ 				   KEY_LENGTH, esp_info->esp_ealg_keylen);
++	    } else {
++		/* no key length - if required add default here and add another max entry */
++		int def_ks = crypto_req_keysize(CRK_ESPorAH, ealg_i);
++
++		if (def_ks) {
++			int max_ks = BITS_PER_BYTE * kernel_alg_esp_enc_keylen(ealg_i);
++
++			db_attr_add_values(db_ctx,
++				KEY_LENGTH,
++				def_ks);
++			/* add this trans again with max key size */
++			if (def_ks != max_ks) {
++				db_trans_add(db_ctx, ealg_i);
++				if (esp_info->esp_aalg_id != AUTH_ALGORITHM_NONE) {
++					db_attr_add_values(db_ctx,
++						AUTH_ALGORITHM,
++						esp_info->esp_aalg_id);
++				}
++				db_attr_add_values(db_ctx,
++					KEY_LENGTH,
++					max_ks);
++			}
++		}
+ 	    }
+-
+ 	} else if(policy & POLICY_AUTHENTICATE) {
+ 	    /*	open new transformation */
+ 	    db_trans_add(db_ctx, aalg_i);
+@@ -597,43 +618,27 @@
+ bool
+ kernel_alg_esp_ok_final(int ealg, unsigned int key_len, int aalg, struct alg_info_esp *alg_info)
+ {
+-	int ealg_insecure;
+-	/*
+-	 * key_len passed comes from esp_attrs read from peer
+-	 * For many older algoritms (eg 3DES) this key_len is fixed
+-	 * and get passed as 0.
+-	 * ... then get default key_len
+-	 */
+-	if (key_len == 0) key_len = kernel_alg_esp_enc_keylen(ealg) * BITS_PER_BYTE;
++	if (key_len == 0)
++		key_len = crypto_req_keysize(CRK_ESPorAH, ealg);
+ 
+-	/* 
+-	 * simple test to toss low key_len, will accept it only
+-	 * if specified in "esp" string
+-	 */
+-	ealg_insecure=(key_len < 128) ;
+-	if (ealg_insecure || alg_info) 
+-	{
+-		int i;
++	if (alg_info != NULL) {
+ 		struct esp_info *esp_info;
+-		if (alg_info) {
+-			ALG_INFO_ESP_FOREACH(alg_info, esp_info, i) {
+-				if ((esp_info->esp_ealg_id == ealg) &&
+-						((esp_info->esp_ealg_keylen==0) || (key_len==0) ||
+-						 (esp_info->esp_ealg_keylen==key_len)) &&
+-						(esp_info->esp_aalg_id == aalg)) {
+-#ifndef USE_1DES
+-					if (ealg_insecure) 
+-						loglog(RC_LOG_SERIOUS, "You should NOT use insecure ESP algorithms [%s (%d)]!"
+-								, enum_name(&esp_transformid_names, ealg), key_len);
+-#endif
+-					return TRUE;
+-				}
++		int i;
++
++		ALG_INFO_ESP_FOREACH(alg_info, esp_info, i) {
++			if (esp_info->esp_ealg_id == ealg &&
++			    (esp_info->esp_ealg_keylen == 0 ||
++			    key_len == 0 ||
++			    esp_info->esp_ealg_keylen == key_len) &&
++			   esp_info->esp_aalg_id == aalg) {
++				return TRUE;
+ 			}
+ 		}
+-		openswan_log("IPsec Transform [%s (%d), %s] refused due to %s",
+-			      enum_name(&esp_transformid_names, ealg), key_len,
+-			      enum_name(&auth_alg_names, aalg),
+-			      ealg_insecure ? "insecure key_len and enc. alg. not listed in \"esp\" string" : "strict flag");
++		openswan_log(
++			"IPsec Transform [%s (%d), %s] refused",
++			enum_name(&esp_transformid_names, ealg),
++			key_len,
++			enum_name(&auth_alg_names, aalg));
+ 		return FALSE;
+ 	}
+ 	return TRUE;
+diff -Naur openswan-2.6.32-orig/programs/pluto/spdb_v1_struct.c openswan-2.6.32/programs/pluto/spdb_v1_struct.c
+--- openswan-2.6.32-orig/programs/pluto/spdb_v1_struct.c	2014-09-17 10:10:43.470000000 -0400
++++ openswan-2.6.32/programs/pluto/spdb_v1_struct.c	2014-09-17 10:11:12.369000000 -0400
+@@ -341,34 +341,17 @@
+ 
+     for (pcn = 0; pcn < sadb->prop_conj_cnt; pcn++)
+     {
+-	struct db_prop_conj *pc;
++	struct db_prop_conj *const pc = &sadb->prop_conjs[pcn];
++	int valid_prop_cnt = pc->prop_cnt;
+ 	unsigned int pn;
+-	int valid_prop_cnt;
+-	
+-	pc = &sadb->prop_conjs[pcn];
+-
+-	/*
+-	 * figure out how many proposals we are going to make,
+-	 * so we'll know when we are finished! This repeats some calculations
+-	 * but this seems like the best method to avoid empty proposals.
+-	 */
+-	valid_prop_cnt = 0;
+-	for (pn = 0; pn < pc->prop_cnt; pn++)
+-	{
+-	    struct db_prop *p;
+ 
+-	    p = &pc->props[pn];
+-
+-	    valid_prop_cnt++;
+-	}
+-	    
+-	DBG(DBG_EMITTING, 
+-	    DBG_log("out_sa pcn: %d has %d valid proposals",
+-		    pcn, valid_prop_cnt));
++	DBG(DBG_EMITTING,
++		DBG_log("out_sa pcn: %d has %d valid proposals",
++			pcn, valid_prop_cnt));
+ 
+ 	for (pn = 0; pn < pc->prop_cnt; pn++)
+ 	{
+-	    struct db_prop *p;
++	    struct db_prop *const p = &pc->props[pn];
+ 	    pb_stream proposal_pbs;
+ 	    struct isakmp_proposal proposal;
+ 	    struct_desc *trans_desc;
+@@ -388,7 +371,6 @@
+ 	    /*
+ 	     * pick the part of the proposal we are trying to work on
+ 	     */
+-	    p = &pc->props[pn];
+ 
+ 	    proposal.isap_proposal = pcn;
+ 	    proposal.isap_protoid = p->protoid;
+@@ -500,14 +482,12 @@
+ 		
+ 		if (spi_ptr != NULL)
+ 		{
+-		    if (spi_generated != NULL && !*spi_generated)
++		    if (!*spi_generated)
+ 		    {
+ 			*spi_ptr = get_ipsec_spi(0
+ 			    , proto
+ 			    , &st->st_connection->spd
+ 			    , tunnel_mode);
+-			if (*spi_ptr == 0)
+-			    return FALSE;
+ 			*spi_generated = TRUE;
+ 		    }
+ 		    if (!out_raw((u_char *)spi_ptr, IPSEC_DOI_SPI_SIZE
+@@ -523,6 +503,8 @@
+ 		pb_stream trans_pbs;
+ 		struct isakmp_transform trans;
+ 		unsigned int an;
++		bool oakley_keysize = FALSE;
++		bool ipsec_keysize = FALSE;
+ 
+ 		trans.isat_np = (tn == p->trans_cnt - 1)
+ 		    ? ISAKMP_NEXT_NONE : ISAKMP_NEXT_T;
+@@ -542,9 +524,10 @@
+ 		{
+ 		    passert(!oakley_mode);
+ 		    passert(st->st_pfs_group != &unset_group);
+-		    out_attr(GROUP_DESCRIPTION, st->st_pfs_group->group
+-			, attr_desc, attr_val_descs
+-			, &trans_pbs);
++		    if (!out_attr(GROUP_DESCRIPTION, st->st_pfs_group->group
++				, attr_desc, attr_val_descs
++				, &trans_pbs))
++			return_on(ret, FALSE);
+ 		}
+ 
+ 		/* automatically generate duration
+@@ -552,13 +535,15 @@
+ 		 */
+ 		if (oakley_mode)
+ 		{
+-		    out_attr(OAKLEY_LIFE_TYPE, OAKLEY_LIFE_SECONDS
+-			, attr_desc, attr_val_descs
+-			, &trans_pbs);
+-		    out_attr(OAKLEY_LIFE_DURATION
+-			, st->st_connection->sa_ike_life_seconds
+-			, attr_desc, attr_val_descs
+-			, &trans_pbs);
++		    if (!out_attr(OAKLEY_LIFE_TYPE, OAKLEY_LIFE_SECONDS
++				, attr_desc, attr_val_descs
++				, &trans_pbs))
++			return_on(ret, FALSE);
++		    if (!out_attr(OAKLEY_LIFE_DURATION
++				, st->st_connection->sa_ike_life_seconds
++				, attr_desc, attr_val_descs
++				, &trans_pbs))
++			return_on(ret, FALSE);
+ 		}
+ 		else
+ 		{
+@@ -587,7 +572,7 @@
+ #endif
+ #endif
+ 
+-			out_attr(ENCAPSULATION_MODE
++			if (!out_attr(ENCAPSULATION_MODE
+ #ifdef NAT_TRAVERSAL
+ #ifdef I_KNOW_TRANSPORT_MODE_HAS_SECURITY_CONCERN_BUT_I_WANT_IT
+ 			    , NAT_T_ENCAPSULATION_MODE(st,st->st_policy)
+@@ -604,15 +589,18 @@
+ 			      ? ENCAPSULATION_MODE_TUNNEL : ENCAPSULATION_MODE_TRANSPORT
+ #endif
+ 			    , attr_desc, attr_val_descs
+-			    , &trans_pbs);
++			    , &trans_pbs))
++			   return_on(ret, FALSE);
+ 		    }
+-		    out_attr(SA_LIFE_TYPE, SA_LIFE_TYPE_SECONDS
+-			, attr_desc, attr_val_descs
+-			, &trans_pbs);
+-		    out_attr(SA_LIFE_DURATION
+-			, st->st_connection->sa_ipsec_life_seconds
+-			, attr_desc, attr_val_descs
+-			, &trans_pbs);
++		    if (!out_attr(SA_LIFE_TYPE, SA_LIFE_TYPE_SECONDS
++				, attr_desc, attr_val_descs
++				, &trans_pbs))
++			return_on(ret, FALSE);
++		    if (!out_attr(SA_LIFE_DURATION
++				, st->st_connection->sa_ipsec_life_seconds
++				, attr_desc, attr_val_descs
++				, &trans_pbs))
++			return_on(ret, FALSE);
+ #ifdef HAVE_LABELED_IPSEC
+ 		    if(st->sec_ctx != NULL && st->st_connection->labeled_ipsec) {
+ 			struct isakmp_attribute attr;
+@@ -638,21 +626,70 @@
+ 
+ 		}
+ 
++		if (oakley_mode) {
++			oakley_keysize = FALSE;
++			for (an = 0; an != t->attr_cnt; an++) {
++				struct db_attr *a = &t->attrs[an];
++
++				if (a->type.oakley == OAKLEY_KEY_LENGTH) {
++					oakley_keysize = TRUE;
++				}
++			}
++		} else {
++			ipsec_keysize = FALSE;
++			for (an = 0; an != t->attr_cnt; an++) {
++				struct db_attr *a = &t->attrs[an];
++
++				if (a->type.ipsec == KEY_LENGTH) {
++					ipsec_keysize = TRUE;
++				}
++			}
++		}
++
+ 		/* spit out attributes from table */
+ 		for (an = 0; an != t->attr_cnt; an++)
+ 		{
+ 		    struct db_attr *a = &t->attrs[an];
+ 
++		    if (!out_attr(oakley_mode ? a->type.oakley : a->type.ipsec ,
++				a->val,
++				attr_desc,
++				attr_val_descs,
++				&trans_pbs))
++			return_on(ret, FALSE);
++
+ 		    if(oakley_mode) {
+-			out_attr(a->type.oakley, a->val
+-				 , attr_desc, attr_val_descs
+-				 , &trans_pbs);
++			if (!oakley_keysize && a->type.oakley == OAKLEY_ENCRYPTION_ALGORITHM) {
++				int defkeysize = crypto_req_keysize(CRK_IKEv1, a->val);
++
++				if (defkeysize != 0) {
++					DBG(DBG_CONTROLMORE, DBG_log("inserting default oakley key length attribute payload of %d bits",
++						defkeysize));
++					if (!out_attr(OAKLEY_KEY_LENGTH,
++							defkeysize,
++							attr_desc,
++							attr_val_descs,
++							&trans_pbs))
++						return_on(ret, FALSE);
++				}
++			}
+ 		    } else {
+-			out_attr(a->type.ipsec,  a->val
+-				 , attr_desc, attr_val_descs
+-				 , &trans_pbs);
+-		    }
+-			
++			/* ipsec_mode */
++			if (!ipsec_keysize) {
++				int defkeysize = crypto_req_keysize(CRK_ESPorAH, t->transid);
++
++				if (defkeysize != 0) {
++					DBG(DBG_CONTROLMORE, DBG_log("inserting default oakley key length attribute payload of %d bits",
++						defkeysize));
++					if (!out_attr(KEY_LENGTH,
++							defkeysize,
++							attr_desc,
++							attr_val_descs,
++							&trans_pbs))
++						return_on(ret, FALSE);
++				}
++			}
++		   }
+ 		}
+ 
+ 		close_output_pbs(&trans_pbs);
+@@ -1580,7 +1617,7 @@
+ , int previous_transnum	/* or -1 if none */
+ , bool selection
+ , bool is_last
+-, bool is_ipcomp
++, u_int8_t proto
+ , struct state *st)	/* current state object */
+ {
+     lset_t seen_attrs = 0
+@@ -1630,7 +1667,7 @@
+ 	pb_stream attr_pbs;
+ 	enum_names *vdesc;
+ 	u_int32_t val;	/* room for larger value */
+-	bool ipcomp_inappropriate = is_ipcomp;	/* will get reset if OK */
++	bool ipcomp_inappropriate = (proto == PROTO_IPCOMP);	/* will get reset if OK */
+ 
+ 	if (!in_struct(&a, &isakmp_ipsec_attribute_desc, trans_pbs, &attr_pbs))
+ 	    return FALSE;
+@@ -1724,7 +1761,7 @@
+ 		}
+ 		break;
+ 	    case GROUP_DESCRIPTION | ISAKMP_ATTR_AF_TV:
+-		if (is_ipcomp)
++		if (proto == PROTO_IPCOMP)
+ 		{
+ 		    /* Accept reluctantly.  Should not happen, according to
+ 		     * draft-shacham-ippcp-rfc2393bis-05.txt 4.1.
+@@ -1890,7 +1927,7 @@
+      * if it does, demand that it be consistent.
+      * See draft-shacham-ippcp-rfc2393bis-05.txt 4.1.
+      */
+-    if (!is_ipcomp || pfs_group != NULL)
++    if (proto != PROTO_IPCOMP || pfs_group != NULL)
+     {
+ 	if (st->st_pfs_group == &unset_group)
+ 	    st->st_pfs_group = pfs_group;
+@@ -1911,7 +1948,7 @@
+ 
+     if (!LHAS(seen_attrs, ENCAPSULATION_MODE))
+     {
+-	if (is_ipcomp)
++	if (proto == PROTO_IPCOMP)
+ 	{
+ 	    /* draft-shacham-ippcp-rfc2393bis-05.txt 4.1:
+ 	     * "If the Encapsulation Mode is unspecified,
+@@ -1931,8 +1968,28 @@
+ 	}
+     }
+ 
+-    /* ??? should check for key_len and/or key_rounds if required */
++    /* Check ealg and key length validity */
++    if (proto == PROTO_IPSEC_ESP) {
++		int ipsec_keysize = crypto_req_keysize(CRK_ESPorAH, attrs->transattrs.encrypt);
+ 
++		if (!LHAS(seen_attrs, KEY_LENGTH)) {
++			if (ipsec_keysize != 0) { /* ealg requires a key length attr */
++				loglog(RC_LOG_SERIOUS,
++					"IPsec encryption transform did not specify required KEY_LENGTH attribute");
++				return FALSE;
++			}
++		}
++
++		err_t ugh = kernel_alg_esp_enc_ok(
++			attrs->transattrs.encrypt,
++			attrs->transattrs.enckeylen);
++		if (ugh != NULL) {
++			 loglog(RC_LOG_SERIOUS,
++				"IPsec encryption transform/keysize rejected: %s",
++				ugh);
++			return FALSE;
++		}
++    }
+     return TRUE;
+ }
+ 
+@@ -2252,7 +2309,7 @@
+ 	    for (tn = 0; tn != ah_proposal.isap_notrans; tn++)
+ 	    {
+ 		int ok_transid = 0;
+-		bool ok_auth = FALSE;
++		bool ok_auth = TRUE;
+ 
+ 		if (!parse_ipsec_transform(&ah_trans
+ 		, &ah_attrs
+@@ -2262,7 +2319,7 @@
+ 		, previous_transnum
+ 		, selection
+ 		, tn == ah_proposal.isap_notrans - 1
+-		, FALSE
++		, PROTO_IPSEC_AH
+ 		, st))
+ 		    return BAD_PROPOSAL_SYNTAX;
+ 
+@@ -2282,25 +2339,45 @@
+ 		 */
+ 		switch (ah_attrs.transattrs.integ_hash)
+ 		{
+-		    case AUTH_ALGORITHM_NONE:
+-			loglog(RC_LOG_SERIOUS, "AUTH_ALGORITHM attribute missing in AH Transform");
+-			return BAD_PROPOSAL_SYNTAX;
++			case AUTH_ALGORITHM_NONE:
++				loglog(RC_LOG_SERIOUS,
++				       "AUTH_ALGORITHM attribute missing in AH Transform");
++				return BAD_PROPOSAL_SYNTAX;
+ 
+-		    case AUTH_ALGORITHM_HMAC_MD5:
+-			ok_auth = TRUE;
++			case AUTH_ALGORITHM_HMAC_MD5:
+ 			/* fall through */
+-		    case AUTH_ALGORITHM_KPDK:
+-			ok_transid = AH_MD5;
+-			break;
++			case AUTH_ALGORITHM_KPDK:
++				ok_transid = AH_MD5;
++				break;
+ 
+-		    case AUTH_ALGORITHM_HMAC_SHA1:
+-			ok_auth = TRUE;
+-			ok_transid = AH_SHA;
+-			break;
++			case AUTH_ALGORITHM_HMAC_SHA1:
++				ok_transid = AH_SHA;
++				break;
+ 
+-		    case AUTH_ALGORITHM_DES_MAC:
+-			ok_transid = AH_DES;
+-			break;
++			case AUTH_ALGORITHM_DES_MAC:
++				loglog(RC_LOG_SERIOUS,
++				       "AH_DES no longer supported");
++				ok_auth = FALSE;
++				break;
++
++			case AUTH_ALGORITHM_HMAC_SHA2_256:
++				ok_transid = AH_SHA2_256;
++				break;
++
++			case AUTH_ALGORITHM_HMAC_SHA2_384:
++				ok_transid = AH_SHA2_384;
++				break;
++
++			case AUTH_ALGORITHM_HMAC_SHA2_512:
++				ok_transid = AH_SHA2_512;
++				break;
++
++			default:
++				loglog(RC_LOG_SERIOUS,
++				       "integ algorithm %d not supported", 
++					ah_attrs.transattrs.integ_hash);
++				ok_auth = FALSE;
++				break;
+ 		}
+ 		if (ah_attrs.transattrs.encrypt != ok_transid)
+ 		{
+@@ -2345,7 +2422,7 @@
+ 		, previous_transnum
+ 		, selection
+ 		, tn == esp_proposal.isap_notrans - 1
+-		, FALSE
++		, PROTO_IPSEC_ESP
+ 		, st))
+ 		    return BAD_PROPOSAL_SYNTAX;
+ 
+@@ -2356,8 +2433,7 @@
+ #ifdef KERNEL_ALG
+ 		if(c->alg_info_esp) {
+ 		    ugh = kernel_alg_esp_enc_ok(esp_attrs.transattrs.encrypt
+-						, esp_attrs.transattrs.enckeylen
+-						, c->alg_info_esp);
++						, esp_attrs.transattrs.enckeylen);
+ 		}
+ #endif
+ 
+@@ -2420,6 +2496,9 @@
+ #ifdef KERNEL_ALG	/* strictly use runtime information */
+ 			case AUTH_ALGORITHM_HMAC_MD5:
+ 			case AUTH_ALGORITHM_HMAC_SHA1:
++			case AUTH_ALGORITHM_HMAC_SHA2_256:
++			case AUTH_ALGORITHM_HMAC_SHA2_384:
++			case AUTH_ALGORITHM_HMAC_SHA2_512:
+ 			    break;
+ #endif
+ 			default:
+@@ -2512,7 +2591,7 @@
+ 		, previous_transnum
+ 		, selection
+ 		, tn == ipcomp_proposal.isap_notrans - 1
+-		, TRUE
++		, PROTO_IPCOMP
+ 		, st))
+ 		    return BAD_PROPOSAL_SYNTAX;
+ 
+diff -Naur openswan-2.6.32-orig/programs/pluto/spdb_v2_struct.c openswan-2.6.32/programs/pluto/spdb_v2_struct.c
+--- openswan-2.6.32-orig/programs/pluto/spdb_v2_struct.c	2014-09-17 10:10:43.773000000 -0400
++++ openswan-2.6.32/programs/pluto/spdb_v2_struct.c	2014-09-17 10:11:12.370000000 -0400
+@@ -112,6 +112,8 @@
+ 	     , bool parentSA
+ 	     , u_int8_t np)
+ {
++    struct ipsec_proto_info *proto_info = NULL;
++    unsigned ipprotoid;
+     pb_stream sa_pbs;
+     bool ret = FALSE;
+     unsigned int  pc_cnt;
+@@ -129,14 +131,30 @@
+ 	    return_on(ret, FALSE);
+     }
+ 
+-    passert(sadb != NULL);
++	switch (protoid) {
++	case PROTO_ISAKMP:
++		break;
+ 
+-    if(!parentSA) {
+-	st->st_esp.our_spi = get_ipsec_spi(0 /* avoid this # */
+-					   , IPPROTO_ESP
++	case PROTO_IPSEC_AH:
++		proto_info = &st->st_ah;
++		ipprotoid = IPPROTO_AH;
++		break;
++
++        case PROTO_IPSEC_ESP:
++		proto_info = &st->st_esp;
++		ipprotoid = IPPROTO_ESP;
++		break;
++
++        default:
++                bad_case(protoid);
++        }
++
++
++    if (proto_info != NULL)
++	proto_info->our_spi = get_ipsec_spi(0 /* avoid this # */
++					   , ipprotoid
+ 					   , &st->st_connection->spd
+ 					   , TRUE /* tunnel */);
+-    }
+ 
+     /* now send out all the proposals */
+     for(pc_cnt=0; pc_cnt < sadb->prop_disj_cnt; pc_cnt++)
+@@ -147,14 +165,39 @@
+ 	/* now send out all the transforms */
+ 	for(pr_cnt=0; pr_cnt < vp->prop_cnt; pr_cnt++)
+ 	{
+-	    unsigned int ts_cnt;	    
+ 	    struct db_v2_prop_conj *vpc = &vp->props[pr_cnt];
++	    unsigned int ts_cnt = vpc->trans_cnt;
++	    unsigned int ts_i;
+ 	    
+ 	    struct ikev2_prop p;
+ 	    pb_stream t_pbs;
+-	    
++	    /* transform to skip (if it equals ts_cnt, then none) */
++	    unsigned skip_encr = ts_cnt;
++
+ 	    memset(&p, 0, sizeof(p));
+-	    
++
++	    /* if we are AH we need to skip any encryption payload */
++	    if (protoid == PROTO_IPSEC_AH) {
++			for (ts_i = 0; ts_i < ts_cnt; ts_i++) {
++				if (vpc->trans[ts_i].transform_type == IKEv2_TRANS_TYPE_ENCR) {
++					/* Why have we got an ENCR transform when
++					 * we are doing AH?
++					 * Skip it.  Should we warn?
++					 */
++					DBG_log("AH: suppressing ENCR %s transform",
++						enum_show(&trans_type_encr_names,
++							vpc->trans[ts_i].transid));
++					skip_encr = ts_i;
++					if (ts_i + 1 == ts_cnt) {
++						/* trim from end */
++						ts_cnt--;
++						/* ts_cnt == skip_encr */
++					}
++					break;
++				}
++			}
++	    }
++
+ 	    /* if there is a next proposal, then the np needs to be set right*/
+ 	    if(pr_cnt+1 < vp->prop_cnt || pc_cnt+1 < sadb->prop_disj_cnt) {
+ 		p.isap_np      = ISAKMP_NEXT_P;
+@@ -168,10 +211,11 @@
+ 	    if(parentSA) {
+ 		p.isap_spisize = 0;  /* set when we rekey */
+ 	    } else {
+-		p.isap_spisize = 4;
++		p.isap_spisize = sizeof(proto_info->our_spi);;
+ 	    }
+-	    p.isap_numtrans= vpc->trans_cnt;
+-	    
++	    p.isap_numtrans = skip_encr == ts_cnt ?
++                                ts_cnt : ts_cnt - 1;
++
+ 	    if (!out_struct(&p, &ikev2_prop_desc, &sa_pbs, &t_pbs))
+ 		return_on(ret, FALSE);
+ 	    
+@@ -179,14 +223,14 @@
+ 		if(parentSA) {
+ 		    /* XXX set when rekeying */
+ 		} else {
+-		    if(!out_raw(&st->st_esp.our_spi, 4
++		    if(!out_raw(&proto_info->our_spi, sizeof(proto_info->our_spi)
+ 				, &t_pbs, "our spi"))
+ 			return STF_INTERNAL_ERROR;
+ 		}
+ 	    }
+ 	
+-	    for(ts_cnt=0; ts_cnt < vpc->trans_cnt; ts_cnt++) {
+-		struct db_v2_trans *tr = &vpc->trans[ts_cnt];
++	    for(ts_i=0; ts_i < ts_cnt; ts_i++) {
++		struct db_v2_trans *tr = &vpc->trans[ts_i];
+ 		struct ikev2_trans t;
+ 		pb_stream at_pbs;
+ 		unsigned int attr_cnt;
+@@ -196,9 +240,12 @@
+ 		if() {
+ 		}
+ #endif
+-	    
++
++		if (ts_i == skip_encr)
++			continue;
++
+ 		memset(&t, 0, sizeof(t));
+-		if(ts_cnt+1 < vpc->trans_cnt) {
++		if(ts_i+1 < ts_cnt) {
+ 		    t.isat_np      = ISAKMP_NEXT_T;
+ 		} else {
+ 		    t.isat_np      = ISAKMP_NEXT_NONE;
+@@ -261,9 +308,6 @@
+ 	return IKEv2_ENCR_CAST;
+     case OAKLEY_AES_CBC:
+ 	return IKEv2_ENCR_AES_CBC;
+-    case OAKLEY_TWOFISH_CBC_SSH:
+-    case OAKLEY_TWOFISH_CBC:
+-    case OAKLEY_SERPENT_CBC:
+     default:
+ 	return IKEv2_ENCR_INVALID;
+     }
+@@ -424,6 +468,12 @@
+ 			}
+ 		    }
+ 		}
++		/* Ensure KEY_LENGTH or OAKLEY_KEY_LENGTH if encr algo requires one */
++		if (dtfone->encr_keylen == 0)
++			dtfone->encr_keylen = crypto_req_keysize(
++				f->parentSA ? CRK_IKEv2 : CRK_ESPorAH,
++				dtfone->encr_transid);
++
+ 		tot_trans++;
+ 	    }
+ 	}
+@@ -706,57 +756,112 @@
+     unsigned int spi_values_next;
+ };
+ 
+-static bool
+-ikev2_match_transform_list_parent(struct db_sa *sadb
+-				  , unsigned int propnum
+-				  , struct ikev2_transform_list *itl)
++/* should be generalised and put somewhere universal */
++/* we should really have an enum for ESP_* which is shares between IKEv1 and IKEv2 */
++static bool ikev2_enc_requires_integ(enum ikev2_trans_type_encr t)
+ {
+-    if(itl->encr_trans_next < 1) {
+-	openswan_log("ignored proposal %u with no cipher transforms",
+-		     propnum);
+-	return FALSE;
+-    }
+-    if(itl->integ_trans_next < 1) {
+-	openswan_log("ignored proposal %u with no integrity transforms",
+-		     propnum);
+-	return FALSE;
+-    }
+-    if(itl->prf_trans_next < 1) {
+-	openswan_log("ignored proposal %u with no prf transforms",
+-		     propnum);
+-	return FALSE;
+-    }
+-    if(itl->dh_trans_next < 1) {
+-	openswan_log("ignored proposal %u with no diffie-hellman transforms",
+-		     propnum);
+-	return FALSE;
+-    }
+-    
+-    /*
+-     * now that we have a list of all the possibilities, see if any
+-     * of them fit.
+-     */
+-    for(itl->encr_i=0; itl->encr_i < itl->encr_trans_next; itl->encr_i++) {
+-	for(itl->integ_i=0; itl->integ_i < itl->integ_trans_next; itl->integ_i++) {
+-	    for(itl->prf_i=0; itl->prf_i < itl->prf_trans_next; itl->prf_i++) {
+-		for(itl->dh_i=0; itl->dh_i < itl->dh_trans_next; itl->dh_i++) {
+-		    if(spdb_v2_match_parent(sadb, propnum, 
+-					    itl->encr_transforms[itl->encr_i],
+-					    itl->encr_keylens[itl->encr_i],
+-					    itl->integ_transforms[itl->integ_i],
+-					    itl->integ_keylens[itl->integ_i],
+-					    itl->prf_transforms[itl->prf_i],
+-					    itl->prf_keylens[itl->prf_i],
+-					    itl->dh_transforms[itl->dh_i])) {
+-			return TRUE;
+-		    }
++        switch (t) {
++        case IKEv2_ENCR_AES_GCM_8:
++        case IKEv2_ENCR_AES_GCM_12:
++        case IKEv2_ENCR_AES_GCM_16:
++        case IKEv2_ENCR_AES_CCM_8:
++        case IKEv2_ENCR_AES_CCM_12:
++        case IKEv2_ENCR_AES_CCM_16:
++                return FALSE;
++        default:
++                return TRUE;
++        }
++}
++
++static bool ikev2_match_transform_list_parent(struct db_sa *sadb,
++					      unsigned int propnum, u_int8_t ipprotoid,
++					      struct ikev2_transform_list *itl)
++{
++	bool need_integ;
++	unsigned int i;
++
++	DBG(DBG_CONTROL,DBG_log("ipprotoid is '%d'", ipprotoid));
++
++	if (ipprotoid == PROTO_IPSEC_ESP && itl->encr_trans_next < 1) {
++		openswan_log("ignored ESP proposal %u with no cipher transforms",
++			      propnum);
++		return FALSE;
++	}
++	if (ipprotoid == PROTO_IPSEC_AH && itl->encr_trans_next > 1) {
++		openswan_log("ignored AH proposal %u with cipher transform(s)",
++			      propnum);
++		return FALSE;
++	}
++
++
++	need_integ = ikev2_enc_requires_integ(itl->encr_transforms[0]);
++
++	if (ipprotoid == PROTO_IPSEC_ESP) {
++		for (i = 1; i < itl->encr_trans_next; i++) {
++			if (ikev2_enc_requires_integ(itl->encr_transforms[i]) != need_integ) {
++				openswan_log("rejecting proposal %u: encryption transforms mix CCM/GCM and non-CCM/GCM",
++					propnum);
++				return FALSE;
++			}
++		}
++
++		/* AES CCM (RFC 4309) and GCM (RFC 4106) do not have a separate integ */
++		if (need_integ) {
++			if (itl->integ_trans_next == 0) {
++				openswan_log("rejecting proposal %u: encryption transform requires an integ transform",
++					propnum);
++				return FALSE;
++			}
++		} else {
++			if (itl->integ_trans_next != 0) {
++				openswan_log("rejecting proposal %u: CCM/GCM encryption transform forbids an integ transform",
++					propnum);
++				return FALSE;
++			}
+ 		}
+-	    }
+ 	}
+-    }
+-    return FALSE;
+-}
+ 
++	if (itl->prf_trans_next == 0) {
++		openswan_log("ignored proposal %u with no PRF transform",
++			      propnum);
++		return FALSE;
++	}
++	if (itl->dh_trans_next == 0) {
++		openswan_log(
++			"ignored proposal %u with no Diffie-Hellman transform",
++			propnum);
++		return FALSE;
++	}
++
++	/*
++	 * now that we have a list of all the possibilities, see if any
++	 * of them match.
++	 */
++
++	for (itl->encr_i = 0; itl->encr_i < itl->encr_trans_next;
++	     itl->encr_i++) {
++		for (itl->integ_i = 0; itl->integ_i < itl->integ_trans_next;
++		     itl->integ_i++) {
++			for (itl->prf_i = 0; itl->prf_i < itl->prf_trans_next;
++			     itl->prf_i++) {
++				for (itl->dh_i = 0;
++				     itl->dh_i < itl->dh_trans_next;
++				     itl->dh_i++) {
++					if (spdb_v2_match_parent(sadb, propnum,
++								 itl->encr_transforms[itl->encr_i],
++								 itl->encr_keylens[itl->encr_i],
++								 itl->integ_transforms[itl->integ_i],
++								 itl->integ_keylens[itl->integ_i],
++								 itl->prf_transforms[itl->prf_i],
++								 itl->prf_keylens[itl->prf_i],
++								 itl->dh_transforms[itl->dh_i]))
++						return TRUE;
++				}
++			}
++		}
++	}
++	return FALSE;
++}
+ static stf_status
+ ikev2_process_transforms(struct ikev2_prop *prop
+ 			 , pb_stream *prop_pbs
+@@ -826,6 +931,24 @@
+ 	    break;
+ 	}
+     }
++
++        if (itl->integ_trans_next == 0) {
++                itl->integ_transforms[0] = IKEv2_AUTH_NONE;
++                itl->integ_keylens[0] = 0;
++                itl->integ_trans_next = 1;
++        } else if (itl->integ_trans_next > 1) {
++                unsigned int i;
++
++                for (i=0; i < itl->integ_trans_next; i++) {
++                        if (itl->integ_transforms[i] == IKEv2_AUTH_NONE) {
++                                /* NONE cannot be part of a set of integ algos */
++                                openswan_log("IKEv2_AUTH_NONE integ transform cannot be part of a set - rejecting proposal");
++                                return BAD_PROPOSAL_SYNTAX;
++                        }
++                }
++        }
++
++
+     return STF_OK;
+ }
+ 
+@@ -838,30 +961,47 @@
+     , bool parentSA
+     , struct ikev2_prop winning_prop)
+ {
++    struct ipsec_proto_info *proto_info = NULL;
+     struct ikev2_prop  r_proposal = winning_prop;
+     pb_stream r_proposal_pbs;
+     struct ikev2_trans r_trans;
+     pb_stream r_trans_pbs;
++
++    /* ??? everything to do with is_ah is a kludge */
++    bool is_ah = FALSE;
+     
+     memset(&r_trans, 0, sizeof(r_trans));
+     
+     if(parentSA) {
+ 	/* Proposal - XXX */
+-	r_proposal.isap_spisize= 0;
++	r_proposal.isap_spisize = 0;
++
++	/* cipher + integrity check + PRF hash + DH group */
++	r_proposal.isap_numtrans = 4;
+     } else {
+-	r_proposal.isap_spisize= 4;
+-	st->st_esp.present = TRUE;
+-	st->st_esp.our_spi = get_ipsec_spi(0 /* avoid this # */
+-					   , IPPROTO_ESP
++	unsigned ipprotoid;
++
++	is_ah = ta.encrypt == ESP_reserved;
++	if (is_ah) {
++		ipprotoid = IPPROTO_AH;
++		proto_info = &st->st_ah;
++		/* integrity check + ESN sequence */
++		r_proposal.isap_numtrans = 2;
++	} else {
++		ipprotoid = IPPROTO_ESP;
++		proto_info = &st->st_esp;
++		/* cipher + integrity check + ESN sequence */
++		r_proposal.isap_numtrans = 3;
++	}
++	r_proposal.isap_spisize = sizeof(proto_info->our_spi);
++
++	proto_info->present = TRUE;
++	proto_info->our_spi = get_ipsec_spi(0 /* avoid this # */
++					   , ipprotoid
+ 					   , &st->st_connection->spd
+ 					   , TRUE /* tunnel */);
+     }
+ 		
+-    if(parentSA) {
+-	r_proposal.isap_numtrans = 4;
+-    } else {
+-	r_proposal.isap_numtrans = 3;
+-    }
+     r_proposal.isap_np = ISAKMP_NEXT_NONE;
+     
+     if(!out_struct(&r_proposal, &ikev2_prop_desc
+@@ -869,23 +1009,63 @@
+ 	impossible();
+     
+     if(!parentSA) {
+-	if(!out_raw(&st->st_esp.our_spi, 4, &r_proposal_pbs, "our spi"))
++	if(!out_raw(&proto_info->our_spi, 4, &r_proposal_pbs, "our spi"))
+ 	    return STF_INTERNAL_ERROR;
+     }
+ 
+     /* Transform - cipher */
++   if (!is_ah) {
+     r_trans.isat_type= IKEv2_TRANS_TYPE_ENCR;
+     r_trans.isat_transid = ta.encrypt;
+     r_trans.isat_np = ISAKMP_NEXT_T;
+     if(!out_struct(&r_trans, &ikev2_trans_desc
+ 		   , &r_proposal_pbs, &r_trans_pbs))
+ 	impossible();
+-    if (ta.encrypter && ta.encrypter->keyminlen != ta.encrypter->keymaxlen)
+-	ikev2_out_attr(IKEv2_KEY_LENGTH, ta.enckeylen
+-		, &ikev2_trans_attr_desc, ikev2_trans_attr_val_descs
+-		, &r_trans_pbs);
++
++	if (ta.encrypter != NULL) {
++		int defkeysize = crypto_req_keysize(parentSA ? CRK_IKEv2 : CRK_ESPorAH,
++			ta.encrypt);
++
++		if (ta.enckeylen != 0){
++			if (ta.enckeylen != ta.encrypter->keydeflen &&
++			    ta.enckeylen != ta.encrypter->keyminlen &&
++			    ta.enckeylen != ta.encrypter->keymaxlen) {
++				return STF_INTERNAL_ERROR;
++			}
++		}
++
++		if (ta.enckeylen == 0) {
++			/* pick up from received proposal, if any */
++			unsigned int stoe = st->st_oakley.enckeylen;
++
++			if (stoe != 0) {
++				if (stoe == ta.encrypter->keyminlen ||
++				    stoe == ta.encrypter->keydeflen ||
++					stoe == ta.encrypter->keymaxlen) {
++						ta.enckeylen = stoe;
++				}
++			} else {
++				ta.enckeylen = defkeysize;
++			}
++		}
++		/* check for mandatory keysize, add if needed */
++		if (defkeysize != 0) {
++			DBG(DBG_CONTROL,DBG_log(
++				"keysize is required - sending key length attribute"));
++			if(!ikev2_out_attr(IKEv2_KEY_LENGTH,
++				ta.enckeylen,
++				&ikev2_trans_attr_desc,
++				ikev2_trans_attr_val_descs,
++				&r_trans_pbs)) {
++					openswan_log("ikev2_out_attr() failed");
++					return STF_INTERNAL_ERROR;
++			}
++		}
++	}
++
+     close_output_pbs(&r_trans_pbs);
+-    
++   }
++ 
+     /* Transform - integrity check */
+     r_trans.isat_type= IKEv2_TRANS_TYPE_INTEG;
+     r_trans.isat_transid = ta.integ_hash;
+@@ -1050,6 +1230,7 @@
+ 
+ 	if(ikev2_match_transform_list_parent(sadb
+ 					     , proposal.isap_propnum
++					     , proposal.isap_protoid
+ 					     , itl)) {
+ 
+ 	    winning_prop = proposal;
+@@ -1090,6 +1271,8 @@
+ 
+     ta.integ_hash  = itl->integ_transforms[itl->integ_i];
+     ta.integ_hasher= (struct hash_desc *)ike_alg_ikev2_find(IKE_ALG_INTEG,ta.integ_hash, 0);
++
++    /* XXX not true for AES_GCM */
+     passert(ta.integ_hasher != NULL);
+ 
+     ta.prf_hash    = itl->prf_transforms[itl->prf_i];
+@@ -1111,112 +1294,203 @@
+     return NOTHING_WRONG;
+ }
+ 
+-static bool 
+-spdb_v2_match_child(struct db_sa *sadb
+-	      , unsigned propnum
+-	      , unsigned encr_transform
+-	      , int encr_keylen
+-	      , unsigned integ_transform
+-	      , int integ_keylen
+-	      , unsigned esn_transform)
++static bool spdb_v2_match_child(struct db_sa *sadb,
++				unsigned propnum,
++				unsigned encr_transform,
++				int encr_keylen,
++				unsigned integ_transform,
++				int integ_keylen,
++				unsigned esn_transform,
++				bool gcm_without_integ)
+ {
+-    struct db_v2_prop *pd;
+-    unsigned int       pd_cnt;
+-    bool encr_matched, integ_matched, esn_matched;
++	unsigned int pd_cnt;
+ 
+-    encr_matched=integ_matched=esn_matched=FALSE;
++	for (pd_cnt = 0; pd_cnt < sadb->prop_disj_cnt; pd_cnt++) {
++		struct db_v2_prop_conj  *pj;
++		unsigned int tr_cnt;
+ 
+-    for(pd_cnt=0; pd_cnt < sadb->prop_disj_cnt; pd_cnt++) {
+-	struct db_v2_prop_conj  *pj;
+-	struct db_v2_trans      *tr;
+-	unsigned int             tr_cnt;
+-	int encrid, integid, prfid, dhid, esnid; 
++		int encrid = 0;
++		int integid = 0;
++		int esnid = 0;
+ 
+-	pd = &sadb->prop_disj[pd_cnt];
+-	encrid = integid = prfid = dhid = esnid = 0;
+-	encr_matched=integ_matched=esn_matched=FALSE;
++		bool integ_matched = gcm_without_integ;
++		bool encr_matched = FALSE;	/* or AH so not needed */
++		bool esn_matched = FALSE;
+ 
+-	/* XXX need to fix this */
+-	if(pd->prop_cnt != 1) continue;
++		int observed_encr_keylen = 0;
++		int observed_integ_keylen = 0;
+ 
+-	pj = &pd->props[0];
+-	if(pj->protoid == PROTO_ISAKMP) continue;
++		{
++			struct db_v2_prop *pd = &sadb->prop_disj[pd_cnt];
+ 
+-	for(tr_cnt=0; tr_cnt < pj->trans_cnt; tr_cnt++) {
+-	   int keylen = -1;
+-	   unsigned int attr_cnt;
++			/* XXX need to fix this */
++			if (pd->prop_cnt != 1)
++				continue;
+ 
+-	    tr = &pj->trans[tr_cnt];
++			pj = &pd->props[0];
++		}
+ 
+-	    for (attr_cnt=0; attr_cnt < tr->attr_cnt; attr_cnt++) {
+-		struct db_attr *attr = &tr->attrs[attr_cnt];
++		if (pj->protoid == PROTO_ISAKMP)
++			continue;
+ 
+-		if (attr->type.ikev2 == IKEv2_KEY_LENGTH)
+-			keylen = attr->val;
+-	    }
++		if (pj->protoid == PROTO_IPSEC_AH)
++			encr_matched = TRUE; /* no encryption used for AH */
+ 
+-	    switch(tr->transform_type) {
+-	    case IKEv2_TRANS_TYPE_ENCR:
+-		encrid = tr->transid;
+-		if(tr->transid == encr_transform && keylen == encr_keylen)
+-		    encr_matched=TRUE;
+-		break;
+-		
+-	    case IKEv2_TRANS_TYPE_INTEG:
+-		integid = tr->transid;
+-		if(tr->transid == integ_transform && keylen == integ_keylen)
+-		    integ_matched=TRUE;
+-		break;
+-		
+-	    case IKEv2_TRANS_TYPE_ESN:
+-		esnid = tr->transid;
+-		if(tr->transid == esn_transform)
+-		    esn_matched=TRUE;
+-		break;
++		for (tr_cnt = 0; tr_cnt < pj->trans_cnt; tr_cnt++) {
++			struct db_v2_trans *tr = &pj->trans[tr_cnt];
++			int keylen = -1;
++			unsigned int attr_cnt;
++
++			for (attr_cnt = 0; attr_cnt < tr->attr_cnt;
++			     attr_cnt++) {
++				struct db_attr *attr = &tr->attrs[attr_cnt];
+ 
+-	    default:
+-		continue;
+-	    }
++				if (attr->type.ikev2 == IKEv2_KEY_LENGTH)
++					keylen = attr->val;
++			}
++
++			DBG(DBG_CONTROLMORE,DBG_log("Starting at transform type %s",
++				enum_show(&trans_type_names, tr->transform_type)));
++			switch (tr->transform_type) {
++			case IKEv2_TRANS_TYPE_ENCR:
++				if (pj->protoid == PROTO_IPSEC_ESP) {
++					encrid = tr->transid;
++					observed_encr_keylen = keylen;
++					if (tr->transid == encr_transform &&
++					(keylen == -1 || encr_keylen == -1 || keylen == encr_keylen))
++						encr_matched = TRUE;
++				}
++				break;
++
++			case IKEv2_TRANS_TYPE_INTEG:
++				integid = tr->transid;
++				observed_integ_keylen = keylen;
++				if (tr->transid == integ_transform && keylen == integ_keylen)
++					integ_matched = TRUE;
++				break;
++
++#if 0	/* eventually, for PFS in CREATE_CHILD_SA */
++			case IKEv2_TRANS_TYPE_DH:
++				if (tr->transid == dh_transform)
++					dh_matched = TRUE;
++				break;
++#endif
++
++			case IKEv2_TRANS_TYPE_ESN:
++				esnid = tr->transid;
++				if (tr->transid == esn_transform)
++					esn_matched = TRUE;
++				break;
++
++			default:
++				DBG(DBG_CONTROLMORE,DBG_log("Not comparing %s transform type",
++					enum_show(&trans_type_names, tr->transform_type)));
++				continue;
++			}
++
++
++			DBG(DBG_CONTROLMORE, {
++				DBG_log("%s proposal %u",
++					(esn_matched && integ_matched && encr_matched) ?
++						"matched" : "failed",
++					propnum);
++				if (pj->protoid == PROTO_IPSEC_ESP) {
++					DBG_log("            %s encr= (policy:%s(%d) vs offered:%s(%d))",
++						encr_matched ? "succeeded" : "failed",
++						enum_name(&trans_type_encr_names, encrid),
++						observed_encr_keylen,
++						enum_name(&trans_type_encr_names,
++							  encr_transform),
++						encr_keylen);
++				}
++				DBG_log("            %s integ=(policy:%s(%d) vs offered:%s(%d))",
++					integ_matched ? "succeeded" : "failed",
++					enum_name(&trans_type_integ_names, integid), observed_integ_keylen,
++					enum_name(&trans_type_integ_names,
++						  integ_transform), integ_keylen);
++				DBG_log("            %s esn=  (policy:%s vs offered:%s)",
++					esn_matched ? "succeeded" : "failed",
++					enum_name(&trans_type_esn_names, esnid),
++					enum_name(&trans_type_esn_names,
++						  esn_transform));
++			});
++
++			if (esn_matched && integ_matched && encr_matched) {
++				return TRUE;
++			}
++		}
++		DBG(DBG_CONTROLMORE, {
++			DBG_log("not matched proposal %u", propnum);
++			if (pj->protoid == PROTO_IPSEC_ESP) {
++			   DBG_log("            %s encr= (policy:%s(%d) vs offered:%s(%d))",
++				encr_matched ? "succeeded" : "failed",
++				enum_name(&trans_type_encr_names, encrid), observed_encr_keylen,
++				enum_name(&trans_type_encr_names,
++					  encr_transform), encr_keylen);
++			}
++			DBG_log("            %s integ=(policy:%s(%d) vs offered:%s(%d))",
++				integ_matched ? "succeeded" : "failed",
++				enum_name(&trans_type_integ_names, integid), observed_integ_keylen,
++				enum_name(&trans_type_integ_names,
++					  integ_transform), integ_keylen);
++			DBG_log("            %s esn=  (policy:%s vs offered:%s)",
++				esn_matched ? "succeeded" : "failed",
++				enum_name(&trans_type_esn_names, esnid),
++				enum_name(&trans_type_esn_names,
++					  esn_transform));
++		});
+ 
+-	    if(esn_matched && integ_matched && encr_matched)
+-		return TRUE;
+-	}
+-	if(DBGP(DBG_CONTROLMORE)) {
+-	    DBG_log("proposal %u %s encr= (policy:%s vs offered:%s)"
+-		    , propnum
+-		    , encr_matched ? "failed" : "     "
+-		    , enum_name(&trans_type_encr_names, encrid)
+-		    , enum_name(&trans_type_encr_names, encr_transform));
+-	    DBG_log("            %s integ=(policy:%s vs offered:%s)"
+-		    , integ_matched ? "failed" : "     "
+-		    , enum_name(&trans_type_integ_names, integid)
+-		    , enum_name(&trans_type_integ_names, integ_transform));
+-	    DBG_log("            %s esn=  (policy:%s vs offered:%s)"
+-		    , esn_matched ? "failed" : "     "
+-		    , enum_name(&trans_type_esn_names, esnid)
+-		    , enum_name(&trans_type_esn_names, esn_transform));
+ 	}
+-	
+-    }
+-    return FALSE;
++	return FALSE;
+ }
+ 
+-
+ static bool
+ ikev2_match_transform_list_child(struct db_sa *sadb
+-				 , unsigned int propnum
++				 , unsigned int propnum, u_int8_t ipprotoid
+ 				 , struct ikev2_transform_list *itl)
+ {
+-    if(itl->encr_trans_next < 1) {
++
++    bool gcm_without_integ = FALSE;
++
++    if(ipprotoid == PROTO_IPSEC_ESP && itl->encr_trans_next < 1) {
+ 	openswan_log("ignored proposal %u with no cipher transforms",
+ 		     propnum);
+ 	return FALSE;
+     }
+-    if(itl->integ_trans_next < 1) {
++    if(ipprotoid == PROTO_IPSEC_AH && itl->integ_trans_next < 1) {
+ 	openswan_log("ignored proposal %u with no integrity transforms",
+ 		     propnum);
+ 	return FALSE;
+     }
++
++        if (ipprotoid == PROTO_IPSEC_ESP) {
++                switch(itl->encr_transforms[0]) {
++                case IKEv2_ENCR_AES_GCM_8:
++                case IKEv2_ENCR_AES_GCM_12:
++                case IKEv2_ENCR_AES_GCM_16:
++                case IKEv2_ENCR_AES_CCM_8:
++                case IKEv2_ENCR_AES_CCM_12:
++                case IKEv2_ENCR_AES_CCM_16:
++                        gcm_without_integ = TRUE;
++                        if (itl->integ_trans_next != 1 || itl->integ_transforms[0] != IKEv2_AUTH_NONE) {
++                                openswan_log(
++                                        "ignored CCM/GCM ESP proposal %u: integrity transform must be IKEv2_AUTH_NONE or absent",
++                                        propnum);
++                                return FALSE;
++                        }
++                        break;
++                default:
++                        passert(itl->integ_trans_next > 0);
++                        if (itl->integ_transforms[0] == IKEv2_AUTH_NONE) {
++                                openswan_log(
++                                        "ignored ESP proposal %u with no integrity transforms (not CCM/GCM)",
++                                        propnum);
++                                return FALSE;
++                        }
++                        break;
++                }
++        }
++
+     if(itl->esn_trans_next == 0) {
+ 	/* what is the default for IKEv2? */
+ 	itl->esn_transforms[itl->esn_trans_next++]=IKEv2_ESN_DISABLED;
+@@ -1226,20 +1500,40 @@
+      * now that we have a list of all the possibilities, see if any
+      * of them fit.
+      */
+-    for(itl->encr_i=0; itl->encr_i < itl->encr_trans_next; itl->encr_i++) {
+-	for(itl->integ_i=0; itl->integ_i < itl->integ_trans_next; itl->integ_i++) {
+-	    for(itl->esn_i=0; itl->esn_i<itl->esn_trans_next; itl->esn_i++) {
+-		if(spdb_v2_match_child(sadb, propnum, 
+-				       itl->encr_transforms[itl->encr_i],
+-				       itl->encr_keylens[itl->encr_i],
+-				       itl->integ_transforms[itl->integ_i],
+-				       itl->integ_keylens[itl->integ_i],
+-				       itl->esn_transforms[itl->esn_i])) {
+-		    return TRUE;
++    if (ipprotoid == PROTO_IPSEC_ESP) {
++		for (itl->encr_i = 0; itl->encr_i < itl->encr_trans_next; itl->encr_i++) {
++			for (itl->integ_i = 0; itl->integ_i < itl->integ_trans_next; itl->integ_i++) {
++				for (itl->esn_i = 0; itl->esn_i < itl->esn_trans_next; itl->esn_i++) {
++					if (spdb_v2_match_child(sadb, propnum,
++						itl->encr_transforms[itl->encr_i],
++						itl->encr_keylens[itl->encr_i],
++						itl->integ_transforms[itl->integ_i],
++						itl->integ_keylens[itl->integ_i],
++						itl->esn_transforms[itl->esn_i], gcm_without_integ))
++							return TRUE;
++				}
++			}
+ 		}
+-	    }
+-	}
++    } else if (ipprotoid == PROTO_IPSEC_AH) {
++			for (itl->integ_i = 0; itl->integ_i < itl->integ_trans_next; itl->integ_i++) {
++				for (itl->esn_i = 0; itl->esn_i < itl->esn_trans_next; itl->esn_i++) {
++					if (spdb_v2_match_child(sadb, propnum,
++						itl->encr_transforms[itl->encr_i],
++						itl->encr_keylens[itl->encr_i],
++						itl->integ_transforms[itl->integ_i],
++						itl->integ_keylens[itl->integ_i],
++						itl->esn_transforms[itl->esn_i], gcm_without_integ))
++							return TRUE;
++				}
++			}
++    } else {
++		openswan_log("Ignored proposal with non-AH/non-ESP protoid '%d'", ipprotoid);
++		return FALSE;
+     }
++
++    DBG(DBG_CONTROLMORE,
++	DBG_log("proposal %u was not usable - but were we not our best?",
++		propnum));
+     return FALSE;
+ }
+ 
+@@ -1256,6 +1550,7 @@
+     pb_stream proposal_pbs;
+     struct ikev2_prop proposal;
+     unsigned int np = ISAKMP_NEXT_P;
++    struct ipsec_proto_info *proto_info = NULL;
+     /* we need to parse proposal structures until there are none */
+     unsigned int lastpropnum=-1;
+     bool conjunction, gotmatch, oldgotmatch;
+@@ -1296,31 +1591,37 @@
+ 	    break;
+ 
+ 	case PROTO_IPSEC_ESP:
+-	    if (proposal.isap_spisize == 4)
+-	    {
+-		unsigned int spival;
+-		if(!in_raw(&spival, proposal.isap_spisize
+-			   , &proposal_pbs, "CHILD SA SPI"))
+-		    return PAYLOAD_MALFORMED;
+-
+-		DBG(DBG_PARSING
+-		    , DBG_log("SPI received: %08x", ntohl(spival)));
+-		itl->spi_values[itl->spi_values_next++]=spival;
+-	    }
+-	    else
+-	    {
+-		loglog(RC_LOG_SERIOUS, "invalid SPI size (%u) in CHILD_SA Proposal"
+-		       , (unsigned)proposal.isap_spisize);
+-		return INVALID_SPI;
+-	    }
++	    proto_info = &st->st_esp;
++	    break;
++	case PROTO_IPSEC_AH:
++	    proto_info = &st->st_ah;
+ 	    break;
+-
+ 	default:
+-	    loglog(RC_LOG_SERIOUS, "unexpected Protocol ID (%s) found in PARENT_SA Proposal"
+-		   , enum_show(&protocol_names, proposal.isap_protoid));
++	    loglog(RC_LOG_SERIOUS,
++		"unexpected Protocol ID (%s) found in PARENT_SA Proposal",
++			enum_show(&protocol_names,
++				proposal.isap_protoid));
+ 	    return INVALID_PROTOCOL_ID;
+ 	}
+ 
++	if (proposal.isap_spisize != sizeof(proto_info->our_spi)) {
++		loglog(RC_LOG_SERIOUS,
++			"invalid SPI size (%u) in CHILD_SA Proposal",
++			(unsigned)proposal.isap_spisize);
++		return INVALID_SPI;
++	}
++
++	if (proposal.isap_spisize != 0) {
++		 unsigned int spival;
++		if (!in_raw(&spival, sizeof(proto_info->our_spi),
++				&proposal_pbs, "CHILD SA SPI")) {
++			loglog(RC_LOG_SERIOUS,
++				"Failed to read CHILD SA SPI");
++			return INVALID_SYNTAX;
++		}
++		itl->spi_values[itl->spi_values_next++]=spival;
++	}
++
+ 	if(proposal.isap_propnum == lastpropnum) {
+ 	    conjunction = TRUE;
+ 	} else {
+@@ -1354,6 +1655,7 @@
+ 
+ 	if(ikev2_match_transform_list_child(p2alg
+ 					    , proposal.isap_propnum
++					    , proposal.isap_protoid
+ 					    , itl)) {
+ 
+ 	    gotmatch = TRUE;
+@@ -1386,17 +1688,26 @@
+     ta.enckeylen = itl->encr_keylens[itl->encr_i] > 0 ?
+ 			itl->encr_keylens[itl->encr_i] : 0;
+ 
++    if (proposal.isap_protoid == PROTO_IPSEC_ESP) {
+     /* this is REALLY not correct, because this is not an IKE algorithm */
+     /* XXX maybe we can leave this to ikev2 child key derivation */
+     ta.encrypter = (struct encrypt_desc *)ike_alg_ikev2_find(IKE_ALG_ENCRYPT
+ 							     , ta.encrypt
+ 							     , ta.enckeylen);
+-    if (ta.encrypter)
++    if (ta.encrypter != NULL)
+     {
++	err_t ugh;
++
+ 	if (!ta.enckeylen)
+ 		ta.enckeylen = ta.encrypter->keydeflen;
+-    } else
+-	passert(ta.encrypt == IKEv2_ENCR_NULL);
++
++	ugh = kernel_alg_esp_enc_ok(ta.encrypt, ta.enckeylen);
++	if (ugh != NULL) {
++		openswan_log("ESP algo %d with key_len %d is not valid (%s)", ta.encrypt, ta.enckeylen, ugh);
++		return STF_FAIL + NO_PROPOSAL_CHOSEN;
++	}
++    }
++    }
+ 
+     /* this is really a mess having so many different numbers for auth
+      * algorithms.
+@@ -1410,14 +1721,14 @@
+     ta1 = ta;
+     ta.integ_hash  = alg_info_esp_v2tov1aa(ta.integ_hash);
+ 
+-    st->st_esp.attrs.transattrs = ta;
+-    st->st_esp.present = TRUE;
++    proto_info->attrs.transattrs = ta;
++    proto_info->present = TRUE;
+ 
+     /* if not confirming, then record the SPI value */
+     if(!selection) {
+-	st->st_esp.attrs.spi = itl->spi_values[itl->spi_values_next -1];
++	proto_info->attrs.spi = itl->spi_values[itl->spi_values_next -1];
+     }
+-    st->st_esp.attrs.encapsulation = ENCAPSULATION_MODE_TUNNEL;
++    proto_info->attrs.encapsulation = ENCAPSULATION_MODE_TUNNEL;
+ 
+     if (r_sa_pbs != NULL)
+     {
+diff -Naur openswan-2.6.32-orig/programs/spi/spi.c openswan-2.6.32/programs/spi/spi.c
+--- openswan-2.6.32-orig/programs/spi/spi.c	2014-09-17 10:10:43.542000000 -0400
++++ openswan-2.6.32/programs/spi/spi.c	2014-09-17 10:11:12.371000000 -0400
+@@ -459,7 +459,7 @@
+ 
+       proc_read_ok++;
+ 
+-      ugh = kernel_alg_esp_enc_ok(esp_ealg_id, 0, 0);
++      ugh = kernel_alg_esp_enc_ok(esp_ealg_id, 0);
+       if (ugh != NULL)
+ 	{
+ 	  fprintf(stderr, "%s: ESP encryptalg=%d (\"%s\") "

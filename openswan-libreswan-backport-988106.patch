@@ -1,0 +1,144 @@
+diff -Naur openswan-2.6.32-orig/include/alg_info.h openswan-2.6.32/include/alg_info.h
+--- openswan-2.6.32-orig/include/alg_info.h	2010-12-17 20:23:54.000000000 -0500
++++ openswan-2.6.32/include/alg_info.h	2014-06-23 10:28:49.203000000 -0400
+@@ -35,7 +35,6 @@
+ 	ST_AK,		/* auth. key length */
+ 	ST_AK_END,
+ 	ST_MODP,	/* modp spec */
+-	ST_FLAG_STRICT,
+ 	ST_END,
+ 	ST_EOF,
+ 	ST_ERR
+@@ -84,7 +83,6 @@
+ #define ALG_INFO_COMMON \
+ 	int alg_info_cnt;		\
+ 	int ref_cnt;			\
+-	unsigned alg_info_flags;	\
+ 	unsigned alg_info_protoid
+ 
+ struct alg_info {
+@@ -111,9 +109,6 @@
+ #define esp_ealg_keylen enckeylen	/* bits */
+ #define esp_aalg_keylen authkeylen	/* bits */
+ 
+-/*	alg_info_flags bits */
+-#define ALG_INFO_F_STRICT	0x01
+-
+ extern enum ipsec_authentication_algo
+ alg_info_esp_aa2sadb(enum ikev1_auth_attribute auth);
+ int alg_info_esp_sadb2aa(int sadb_aalg);
+diff -Naur openswan-2.6.32-orig/lib/libopenswan/alg_info.c openswan-2.6.32/lib/libopenswan/alg_info.c
+--- openswan-2.6.32-orig/lib/libopenswan/alg_info.c	2014-06-23 10:27:15.436000000 -0400
++++ openswan-2.6.32/lib/libopenswan/alg_info.c	2014-06-23 10:33:13.045000000 -0400
+@@ -348,7 +348,6 @@
+ 	"ST_AK",
+ 	"ST_AK_END",
+ 	"ST_MOPD",
+-	"ST_FLAG_STRICT",
+ 	"ST_END",
+ 	"ST_EOF",
+ 	"ST_ERR"
+@@ -376,7 +375,6 @@
+ 	/* chars that end algo strings */
+ 	switch(ch){
+ 	case 0:		/* end-of-string */
+-	case '!':	/* flag as strict algo list */
+ 	case ',':	/* algo string separator */
+ 	    switch(p_ctx->state) {
+ 	    case ST_EA:
+@@ -384,17 +382,14 @@
+ 	    case ST_AA:
+ 	    case ST_AK: 
+ 	    case ST_MODP:
+-	    case ST_FLAG_STRICT:
+ 		{
+-		    enum parser_state_esp next_state=0;
+-		    switch(ch) {
+-		    case 0:   next_state=ST_EOF;break;
+-		    case ',': next_state=ST_END;break;
+-		    case '!': next_state=ST_FLAG_STRICT;break;
+-		    }
+-		    /* ch? parser_set_state(p_ctx, ST_END) : parser_set_state(p_ctx, ST_EOF) ; */
+-		    parser_set_state(p_ctx, next_state);
+-		    goto out;
++			enum parser_state_esp next_state=0;
++			switch(ch) {
++			case 0: next_state=ST_EOF;break;
++			case ',': next_state=ST_END;break;
++			}
++			parser_set_state(p_ctx, next_state);
++			goto out;
+ 		}
+ 	    default:
+ 		p_ctx->err="String ended with invalid char";
+@@ -532,14 +527,6 @@
+ 	    }
+ 	    p_ctx->err="Non alphanum char found after in modp string";
+ 	    goto err;
+-	case ST_FLAG_STRICT:
+-	    if (ch == 0) {
+-		parser_set_state(p_ctx, ST_END);
+-	    }
+-	    p_ctx->err="Flags character(s) must be at end of whole string";
+-	    goto err;
+-	    
+-	    /* XXX */
+ 	case ST_END:
+ 	case ST_EOF:
+ 	case ST_ERR:
+@@ -699,10 +686,6 @@
+ 	    ctx.ch=*ptr++;
+ 	    ret= parser_machine(&ctx);
+ 	    switch(ret) {
+-	    case ST_FLAG_STRICT:
+-		alg_info->alg_info_flags |= ALG_INFO_F_STRICT;
+-		break;
+-
+ 	    case ST_END:
+ 	    case ST_EOF:
+ 		DBG(DBG_CRYPT, DBG_log("alg_info_parse_str() "
+@@ -1057,18 +1040,6 @@
+         }
+ 	goto out;
+     }
+-    if(buflen > 0){
+-	np=snprintf(ptr, buflen, "; flags=%s",
+-		alg_info->alg_info_flags&ALG_INFO_F_STRICT?
+-		"strict":"-strict");
+-    	if(np < buflen) {
+-		ptr+=np;
+-		buflen-=np;
+-    	} else {
+-		ptr+=buflen;
+-		buflen=0;
+-    	}
+-    }
+ 
+  out:
+     passert(buflen >= 0);
+diff -Naur openswan-2.6.32-orig/programs/pluto/ike_alg.c openswan-2.6.32/programs/pluto/ike_alg.c
+--- openswan-2.6.32-orig/programs/pluto/ike_alg.c	2014-06-23 10:27:15.425000000 -0400
++++ openswan-2.6.32/programs/pluto/ike_alg.c	2014-06-23 10:28:49.205000000 -0400
+@@ -130,8 +130,7 @@
+ 	 */
+ 	int ealg_insecure=(key_len < 128) ;
+ 
+-	if (ealg_insecure || 
+-		(alg_info_ike && alg_info_ike->alg_info_flags & ALG_INFO_F_STRICT))
++	if (ealg_insecure || alg_info_ike)
+ 	{
+ 		int i;
+ 		struct ike_info *ike_info;
+diff -Naur openswan-2.6.32-orig/programs/pluto/plutoalg.c openswan-2.6.32/programs/pluto/plutoalg.c
+--- openswan-2.6.32-orig/programs/pluto/plutoalg.c	2010-12-17 20:23:54.000000000 -0500
++++ openswan-2.6.32/programs/pluto/plutoalg.c	2014-06-23 10:28:49.205000000 -0400
+@@ -611,8 +611,7 @@
+ 	 * if specified in "esp" string
+ 	 */
+ 	ealg_insecure=(key_len < 128) ;
+-	if (ealg_insecure || 
+-		(alg_info && alg_info->alg_info_flags & ALG_INFO_F_STRICT))
++	if (ealg_insecure || alg_info) 
+ 	{
+ 		int i;
+ 		struct esp_info *esp_info;

@@ -11,7 +11,7 @@
 Summary: IPSEC implementation with IKEv1 and IKEv2 keying protocols
 Name: openswan
 Version: 2.6.32
-Release: 27%{?dist}
+Release: 37%{?dist}
 
 License: GPLv2+
 Url: http://www.openswan.org/
@@ -81,6 +81,32 @@ Patch56: openswan-libreswan-backport-975550.patch
 Patch57: openswan-libreswan-backport-994240.patch
 Patch58: openswan-libreswan-backport-1002312.patch
 Patch59: openswan-libreswan-backport-fips.patch
+Patch60: openswan-libreswan-backport-CVE-2013-6466.patch
+Patch61: openswan-2.6.32-20140225-fixup.patch
+Patch62: openswan-2.6.32-neutron.patch
+Patch63: openswan-libreswan-backport-1088656.patch
+Patch64: openswan-1025687.patch
+Patch65: openswan-2.6.32-1105179.patch
+Patch66: openswan-libreswan-backport-1002708.patch
+# DPD keepalive patch removed
+#Patch67: openswan-libreswan-backport-908478.patch
+Patch68: openswan-libreswan-backport-970349.patch
+Patch69: openswan-libreswan-backport-970279.patch
+Patch70: openswan-libreswan-backport-988106.patch
+Patch71: openswan-libreswan-backport-1019746.patch
+Patch72: openswan-2.6.32-manpage.patch
+Patch73: openswan-libreswan-backport-1021961.patch
+Patch74: openswan-libreswan-backport-739949.patch
+Patch75: openswan-libreswan-backport-993124.patch
+Patch76: openswan-libreswan-backport-834397.patch
+Patch77: openswan-libreswan-backport-1092913.patch
+Patch78: openswan-libreswan-backport-1098473.patch
+Patch79: openswan-libreswan-backport-1114683-combined.patch
+Patch80: openswan-libreswan-backport-1126066.patch
+Patch81: openswan-libreswan-backport-993124-msgid.patch
+Patch82: openswan-2.6.32-993124-msgid-gcc.patch
+Patch84: openswan-libreswan-backport-1114683-sha-alias.patch
+Patch85: openswan-libreswan-backport-1114683-nhelpers0_ikev2.patch
 
 Group: System Environment/Daemons
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
@@ -175,7 +201,7 @@ find doc -name .gitignore -print0 | xargs -0 rm -v
 %patch30 -p1
 %patch31 -p1
 
-# pwouters backpors from libreswan
+# pwouters backports from libreswan
 %patch33 -p1
 %patch34 -p1
 %patch35 -p1
@@ -203,8 +229,35 @@ find doc -name .gitignore -print0 | xargs -0 rm -v
 %patch57 -p1
 %patch58 -p1
 %patch59 -p1
+%patch60 -p1
+%patch61 -p1
+%patch62 -p1
+%patch63 -p1
+%patch64 -p1
+%patch65 -p1
+%patch66 -p1
+# DPD patch removed
+%patch68 -p1
+%patch69 -p1
+%patch70 -p1
+%patch71 -p1
+%patch72 -p1
+%patch73 -p1
+%patch74 -p1
+%patch75 -p1
+%patch76 -p1
+%patch77 -p1
+%patch78 -p1
+%patch79 -p1
+%patch80 -p1
+%patch81 -p1
+%patch82 -p1
+%patch84 -p1
+%patch85 -p1
 
 %build
+# When building this old codebase with newer GCC's, eg 4.6+, you must add
+# -Wno-error-cpp to CFLAGS and add GCC_CPP_FLAG=-Wno-error=cpp
 %{__make} \
   USERCOMPILE="-g -DGCC_LINT %{optflags} -fPIE -pie -fno-strict-aliasing -Wformat -Wformat-nonliteral -Wformat-security -Wunused-variable" \
   USERLINK="-g -pie -Wl,-z,relro -Wl,-z,now" \
@@ -265,6 +318,8 @@ rm -rf $RPM_BUILD_ROOT/usr/share/doc/openswan
 # ipsec and setup both installed by default - they are identical
 rm -f $RPM_BUILD_ROOT/etc/rc.d/init.d/setup
 rm -f $RPM_BUILD_ROOT/usr/share/man/man3/*
+# alias for ipsec_whack to pluto
+echo ".so man8/ipsec_pluto.8" > $RPM_BUILD_ROOT/usr/share/man/man8/ipsec_whack.8
 install -d -m 0700 $RPM_BUILD_ROOT%{_localstatedir}/run/pluto
 %if %{USE_FIPSCHECK}
 install -d $RPM_BUILD_ROOT/%{_sysconfdir}/prelink.conf.d/
@@ -340,8 +395,62 @@ fi
 
 %post
 chkconfig --add ipsec || :
+if [ ! -f %{_sysconfdir}/ipsec.d/cert8.db ] ; then
+    TEMPFILE=$(/bin/mktemp %{_sysconfdir}/ipsec.d/nsspw.XXXXXXX)
+    [ $? -gt 0 ] && TEMPFILE=%{_sysconfdir}/ipsec.d/nsspw.$$
+    echo > ${TEMPFILE}
+    certutil -N -f ${TEMPFILE} -d %{_sysconfdir}/ipsec.d
+    restorecon %{_sysconfdir}/ipsec.d/*db 2>/dev/null || :
+    rm -f ${TEMPFILE}
+fi
 
 %changelog
+* Wed Sep 17 2014 Paul Wouters <pwouters@redhat.com> - 2.6.32-37
+- Resolves: rhbz#1114683 configuring a non-standard AH / ESP algorithm [aes_gcm/aes_ccm/cast]
+
+* Wed Aug 20 2014 Paul Wouters <pwouters@redhat.com> - 2.6.32-36
+- Resolves: rhbz#1114683 configuring a non-standard AH / ESP algorithm [updated2]
+
+* Tue Aug 19 2014 Paul Wouters <pwouters@redhat.com> - 2.6.32-35
+- Resolves: rhbz#1114683 configuring a non-standard AH / ESP algorithm [updated]
+- Resolves: rhbz#993124 ikev2 delete - work around to unbreak -fstack-protector [updated]
+
+* Thu Aug 14 2014 Paul Wouters <pwouters@redhat.com> - 2.6.32-34
+- Resolves: rhbz#993124 ikev2 delete - Fix msgid handling and retransmit logic
+
+* Fri Aug 08 2014 Paul Wouters <pwouters@redhat.com> - 2.6.32-33
+- Resolves: rhbz#739949 Updated patch to fixup src/dst bug in netlink_shunt_eroute
+
+* Fri Aug 01 2014 Paul Wouters <pwouters@redhat.com> - 2.6.32-32
+- Resolves: rhbz#1092913 create nss db before startup if not there
+- Resolves: rhbz#1098473 ipsec newhostkey returns 0 even if it fails (and enforce min 2192 RSA key size)
+- Resolves: rhbz#1114683 configuring a non-standard ESP algorithm (like CAST) cause a restart of pluto
+- Resolves: rhbz#1126066 dcookie code enabled with force_busy=yes uses bad pointer causing restart
+
+* Wed Jun 25 2014 Paul Wouters <pwouters@redhat.com> - 2.6.32-31
+- Resolves: rhbz#1088656 pluto doesn't bring up sourceip route when peer restarts
+- Resolves: rhbz#1070356 openswan breaks NAT-T draft clients
+- Resolves: rhbz#1041576 (pluto cannot write to directories not owned by root)
+- Resolves: rhbz#1025687 service ipsec stop shows errors about unloading used modules
+- Resolves: rhbz#1092913 The default nss database created by ipsec can not be used
+- Resolves: rhbz#1105179 ipsec_auto --ready doesn't work properly
+- Resolves: rhbz#1002708 rightid=%fromcert does not use the ID from the offered peer certificate
+- Resolves: rhbz#908478  Openswan is sending DPD and/or NAT-T keep alive messages when the IPsec SA is active
+- Resolves: rhbz#970349  ikev2 pending SA and rekey issues
+- Resolves: rhbz#970279  ikev2=insist allows an ikev1 proposal when acting as responder
+- Resolves: rhbz#988106  strict checking of phase2alg= parameters allows mismatched policy
+- Resolves: rhbz#1019746 ipsec ikeping does not recognize --exchangenum parameter
+- Resolves: rhbz#1018327 ipsec.conf man page lacks example for AES-GCM configuration
+- Resolves: rhbz#730975  Openswan doesn't work with ike=modp1536 option
+- Resolves: rhbz#1021961 pluto abort when using SHA2_{384,512} IKE encryption algorithm
+- Resolves: rhbz#739949  Openswan net-to-net not work with unencrypted connection on specific port
+- Resolves: rhbz#993124  ikev2 delete payloads are not delivered to peer
+- Resolves: rhbz#834397  ikev2 crashes when firing up a few conns at once
+- Resolves: rhbz#1099871  Missing man-page ipsec_whack
+
+* Mon Feb 10 2014 Paul Wouters <pwouters@redhat.com> - 2.6.32-27.1
+- Resolves: CVE-2013-6466 (rhbz#1050340)
+
 * Thu Oct 17 2013 Paul Wouters <pwouters@redhat.com> - 2.6.32-27
 - Resolves: rhbz#1020322 openswan cannot start if FIPS misconfigured
 

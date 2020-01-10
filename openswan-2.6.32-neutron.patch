@@ -1,0 +1,44 @@
+diff -Naur openswan-2.6.32-orig/programs/pluto/plutomain.c openswan-2.6.32/programs/pluto/plutomain.c
+--- openswan-2.6.32-orig/programs/pluto/plutomain.c	2014-03-30 20:14:30.740685999 -0400
++++ openswan-2.6.32/programs/pluto/plutomain.c	2014-03-30 20:16:17.372948328 -0400
+@@ -354,19 +354,6 @@
+     leak_detective=0;
+ #endif
+ 
+-#ifdef HAVE_LIBCAP_NG
+-	/* Drop capabilities */
+-	capng_clear(CAPNG_SELECT_BOTH);
+-	capng_updatev(CAPNG_ADD, CAPNG_EFFECTIVE|CAPNG_PERMITTED,
+-			CAP_NET_BIND_SERVICE, CAP_NET_ADMIN, CAP_NET_RAW,
+-			CAP_IPC_LOCK, -1);
+-	/* our children must be able to CAP_NET_ADMIN to change routes.
+-	 */
+-	capng_updatev(CAPNG_ADD, CAPNG_BOUNDING_SET,
+-			CAP_NET_ADMIN, -1);
+-	capng_apply(CAPNG_SELECT_BOTH);
+-#endif
+-
+ 
+     global_argv = argv;
+     global_argc = argc;
+@@ -1107,6 +1094,20 @@
+ #endif
+ 
+     daily_log_event();
++
++#ifdef HAVE_LIBCAP_NG
++	/* Drop capabilities */
++	capng_clear(CAPNG_SELECT_BOTH);
++	capng_updatev(CAPNG_ADD, CAPNG_EFFECTIVE|CAPNG_PERMITTED,
++			CAP_NET_BIND_SERVICE, CAP_NET_ADMIN, CAP_NET_RAW,
++			CAP_IPC_LOCK, -1);
++	/* our children must be able to CAP_NET_ADMIN to change routes.
++	 */
++	capng_updatev(CAPNG_ADD, CAPNG_BOUNDING_SET,
++			CAP_NET_ADMIN, -1);
++	capng_apply(CAPNG_SELECT_BOTH);
++#endif
++
+     call_server();
+     return -1;	/* Shouldn't ever reach this */
+ }

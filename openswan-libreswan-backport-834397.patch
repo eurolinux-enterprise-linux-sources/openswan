@@ -1,0 +1,73 @@
+diff -Naur openswan-2.6.32-orig/programs/pluto/ikev1_aggr.c openswan-2.6.32/programs/pluto/ikev1_aggr.c
+--- openswan-2.6.32-orig/programs/pluto/ikev1_aggr.c	2014-06-22 17:09:13.032000000 -0400
++++ openswan-2.6.32/programs/pluto/ikev1_aggr.c	2014-06-22 17:11:46.959000000 -0400
+@@ -1073,10 +1073,6 @@
+ 	    pcrc_init(&ke->ke_pcrc);
+ 	    ke->ke_pcrc.pcrc_func = aggr_outI1_continue;
+ 	    e = build_ke(&ke->ke_pcrc, st, st->st_oakley.group, importance);
+-	    if(e != STF_SUSPEND && e != STF_INLINE) {
+-	      loglog(RC_CRYPTOFAILED, "system too busy");
+-	      delete_state(st);
+-	    }
+ 	} else {
+ 	    e = aggr_outI1_tail((struct pluto_crypto_req_cont *)ke
+ 					, NULL);
+diff -Naur openswan-2.6.32-orig/programs/pluto/ikev2.c openswan-2.6.32/programs/pluto/ikev2.c
+--- openswan-2.6.32-orig/programs/pluto/ikev2.c	2014-06-22 17:09:13.161000000 -0400
++++ openswan-2.6.32/programs/pluto/ikev2.c	2014-06-22 17:13:51.245000000 -0400
+@@ -1009,7 +1009,7 @@
+     	from_state   = st->st_state;
+ 	openswan_log("message in state %s ignored due to cryptographic overload"
+ 		     , enum_name(&state_names, from_state));
+-	break;
++	/* FALL THROUGH */
+ 
+     case STF_FATAL:
+ 	/* update the previous packet history */
+diff -Naur openswan-2.6.32-orig/programs/pluto/ikev2_parent.c openswan-2.6.32/programs/pluto/ikev2_parent.c
+--- openswan-2.6.32-orig/programs/pluto/ikev2_parent.c	2014-06-22 17:09:13.136000000 -0400
++++ openswan-2.6.32/programs/pluto/ikev2_parent.c	2014-06-22 17:17:29.731000000 -0400
+@@ -224,10 +224,6 @@
+ 	    pcrc_init(&ke->ke_pcrc);
+ 	    ke->ke_pcrc.pcrc_func = ikev2_parent_outI1_continue;
+ 	    e = build_ke(&ke->ke_pcrc, st, st->st_oakley.group, importance);
+-	    if( (e != STF_SUSPEND && e != STF_INLINE) || (e == STF_TOOMUCHCRYPTO)) {
+-	      loglog(RC_CRYPTOFAILED, "system too busy - Enabling dcookies [TODO]");
+-	      delete_state(st);
+-	    }
+ 	} else {
+ 	    e = ikev2_parent_outI1_tail((struct pluto_crypto_req_cont *)ke
+ 					, NULL);
+@@ -647,10 +643,6 @@
+ 	    pcrc_init(&ke->ke_pcrc);
+ 	    ke->ke_pcrc.pcrc_func = ikev2_parent_inI1outR1_continue;
+ 	    e = build_ke(&ke->ke_pcrc, st, st->st_oakley.group, pcim_stranger_crypto);
+-	    if(e != STF_SUSPEND && e != STF_INLINE) {
+-	      loglog(RC_CRYPTOFAILED, "system too busy");
+-	      delete_state(st);
+-	    }
+ 	} else {
+ 	    e = ikev2_parent_inI1outR1_tail((struct pluto_crypto_req_cont *)ke
+ 					    , NULL);
+@@ -935,10 +927,6 @@
+ 	pcrc_init(&dh->dh_pcrc);
+ 	dh->dh_pcrc.pcrc_func = ikev2_parent_inR1outI2_continue;
+ 	e = start_dh_v2(&dh->dh_pcrc, st, st->st_import, INITIATOR, st->st_oakley.groupnum);
+-	if(e != STF_SUSPEND && e != STF_INLINE) {
+-	    loglog(RC_CRYPTOFAILED, "system too busy");
+-	    delete_state(st);
+-	}
+ 
+ 	reset_globals();
+ 
+@@ -1515,10 +1503,6 @@
+ 	pcrc_init(&dh->dh_pcrc);
+ 	dh->dh_pcrc.pcrc_func = ikev2_parent_inI2outR2_continue;
+ 	e = start_dh_v2(&dh->dh_pcrc, st, st->st_import, RESPONDER, st->st_oakley.groupnum);
+-	if(e != STF_SUSPEND && e != STF_INLINE) {
+-	    loglog(RC_CRYPTOFAILED, "system too busy");
+-	    delete_state(st);
+-	}
+ 
+ 	reset_globals();
+ 

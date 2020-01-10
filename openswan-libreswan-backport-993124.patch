@@ -1,0 +1,1762 @@
+diff -Naur openswan-2.6.32-orig/include/pluto_constants.h openswan-2.6.32/include/pluto_constants.h
+--- openswan-2.6.32-orig/include/pluto_constants.h	2014-07-18 19:32:51.565000000 -0400
++++ openswan-2.6.32/include/pluto_constants.h	2014-07-18 19:33:28.129000000 -0400
+@@ -351,7 +351,13 @@
+ 				  || (s) == STATE_MODE_CFG_R0 || (s) == STATE_MODE_CFG_R1 \
+ 				  || (s) == STATE_MODE_CFG_R2 || (s) == STATE_MODE_CFG_I1 \
+                                   || (s) == STATE_XAUTH_I0 || (s) == STATE_XAUTH_I1)
+-#define IS_IPSEC_SA_ESTABLISHED(s) ((s) == STATE_QUICK_I2 || (s) == STATE_QUICK_R2)
++#define IS_IPSEC_SA_ESTABLISHED(s) ((s) == STATE_QUICK_I2 || \
++				(s) == STATE_QUICK_R2 || \
++				(s) == STATE_PARENT_I3 || \
++				(s) == STATE_PARENT_R2)
++
++#define IS_V2_ESTABLISHED(s) ((s) == STATE_PARENT_R2 || (s) == STATE_PARENT_I3)
++
+ #define IS_ONLY_INBOUND_IPSEC_SA_ESTABLISHED(s) ((s) == STATE_QUICK_R1)
+ #ifdef MODECFG
+ #define IS_MODE_CFG_ESTABLISHED(s) ((s) == STATE_MODE_CFG_R2)
+@@ -360,10 +366,19 @@
+ #define IS_PARENT_SA_ESTABLISHED(s) ((s) == STATE_PARENT_I3 || (s) == STATE_PARENT_R2)
+ #define IS_CHILD_SA_ESTABLISHED(st) (((st->st_state) == STATE_PARENT_I3 || (st->st_state) == STATE_PARENT_R2 || (st->st_state) == STATE_CHILDSA_DEL) && (st->st_childsa != NULL))
+ 
++#define IS_V2_INITIATOR(s) ((s) == STATE_PARENT_I1 || \
++                            (s) == STATE_PARENT_I2 || \
++                            (s) == STATE_PARENT_I3)
++
++#define IS_IKE_SA_ESTABLISHED(s) (IS_ISAKMP_SA_ESTABLISHED(s) || IS_PARENT_SA_ESTABLISHED(s))
++
+ 
+ #define IS_CHILD_SA(st)  ((st)->st_clonedfrom != SOS_NOBODY)
+ #define IS_PARENT_SA(st) (!IS_CHILD_SA(st))
+ 
++#define IS_IKE_SA(st) (IS_PHASE1(st->st_state) || IS_PHASE15(st->st_state) ||\
++                IS_PARENT_SA(st))
++
+ 
+ /* kind of struct connection
+  * Ordered (mostly) by concreteness.  Order is exploited.
+diff -Naur openswan-2.6.32-orig/programs/pluto/dpd.c openswan-2.6.32/programs/pluto/dpd.c
+--- openswan-2.6.32-orig/programs/pluto/dpd.c	2014-07-18 19:32:51.629000000 -0400
++++ openswan-2.6.32/programs/pluto/dpd.c	2014-07-18 19:33:28.130000000 -0400
+@@ -616,31 +616,6 @@
+ 	break;
+ 
+     case DPD_ACTION_RESTART:
+-	/** dpdaction=restart - immediate renegotiate the connection. */
+-        openswan_log("DPD: Restarting Connection");
+-
+-	/*
+-	 * unlike the other kinds, we do not delete any states,
+-	 * but rather, we arrange to replace all SAs involved.
+-	 */
+-	rekey_p2states_by_connection(c);
+-
+-	if (c->kind == CK_INSTANCE) {
+-		/* If this is a template (eg: right=%any) we won't be able to
+-		 * reinitiate, the peer has probably changed IP addresses,
+-		 * or isn't available anymore.  So remove the routes too */
+-	        unroute_connection(c);        /* --unroute */
+-	}
+-
+-	/* we schedule the replace of the SA so that we do it
+-	 * in a rational place and do it at a negative future time,
+-	 * so it will occur before any of the phase 2 replacements.
+-	 */
+-	delete_event(st);
+-	delete_dpd_event(st);
+-	event_schedule(EVENT_SA_REPLACE, 0, st);
+-	break;
+-
+     case DPD_ACTION_RESTART_BY_PEER:
+ 	/* dpdaction=restart_by_peer - immediately renegotiate connections to the same peer. */
+ 	openswan_log("DPD: Restarting all connections that share this peer");
+diff -Naur openswan-2.6.32-orig/programs/pluto/ikev2.c openswan-2.6.32/programs/pluto/ikev2.c
+--- openswan-2.6.32-orig/programs/pluto/ikev2.c	2014-07-18 19:32:51.631000000 -0400
++++ openswan-2.6.32/programs/pluto/ikev2.c	2014-07-18 19:33:28.131000000 -0400
+@@ -389,7 +389,6 @@
+     enum state_kind from_state = STATE_UNDEFINED; /* state we started in */
+     const struct state_v2_microcode *svm;
+     enum isakmp_xchg_types ix;
+-    bool rcookiezero;
+ 
+     /* Look for an state which matches the various things we know */
+     /*
+@@ -402,7 +401,6 @@
+ 
+     if(md->hdr.isa_flags & ISAKMP_FLAGS_I) {
+ 	/* then I am the responder */
+-	rcookiezero = is_zero_cookie(md->hdr.isa_rcookie);
+ 
+ 	md->role = RESPONDER;
+ 
+@@ -416,34 +414,20 @@
+ 	    st = find_state_ikev2_parent_init(md->hdr.isa_icookie);
+ 	}
+ 
+-	if(st) {
+-	    /* if it is request from Initiator*/
+-	    if(!(md->hdr.isa_flags & ISAKMP_FLAGS_R)) {
+-		if(st->st_msgid_last_remotereq != INVALID_MSGID && st->st_msgid_last_remotereq > md->msgid_received){
+-		/* this is an OLD retransmit. we can't do anything */
+-		openswan_log("received too old retransmit, ignoring: %u < %u"
++	if(st != NULL) {
++		if(st->st_msgid_last_remotereq > md->msgid_received) {
++			/* this is an OLD retransmit. we can't do anything */
++			openswan_log("received too old retransmit, ignoring: %u < %u"
+ 			     , md->msgid_received, st->st_msgid_last_remotereq);
+-		return;
++			return;
+ 		}
+-		if(st->st_msgid_last_remotereq != INVALID_MSGID && st->st_msgid_last_remotereq == md->msgid_received){
+-		/* this is a recent retransmit. */
+-		send_ike_msg(st, "ikev2-responder-retransmit");
+-		return;
++		if(st->st_msgid_last_remotereq == md->msgid_received) {
++			/* this is a recent retransmit. */
++			send_ike_msg(st, "ikev2-responder-retransmit");
++			return;
+ 		}
+-	    }
+-	    else 
+-	    {
+-	    /* if it is response from Initiator*/
+-		/* it seems that it should not happen 
+-		 * why a response will be retransmitted?
+-		 */
+-		if(st->st_msgid_last_localreq_ack!=INVALID_MSGID &&  st->st_msgid_last_localreq_ack >= md->msgid_received){
+-		openswan_log("received an old response, ignoring: %u < %u"
+-                             , md->msgid_received, st->st_msgid_last_localreq_ack);
+-		}
+-	    }
++	 }
+ 	    /* update lastrecv later on */
+-	}
+     } else {
+         /* then I am the initiator, and this may be a reply or request */
+ 	
+@@ -468,7 +452,7 @@
+ 					, md->hdr.isa_rcookie
+ 					, md->hdr.isa_msgid);
+ 	    
+-	    if(st) {
++	    if(st != NULL) {
+ 		/* found this child state, so we'll use it */
+ 		/* note we update the st->st_msgid_lastack *AFTER* decryption*/
+ 	    } else {
+@@ -481,56 +465,41 @@
+ 	    }
+ 	}
+ 
+-	if(st) {
+-	    /* if it is request from Responder*/
+-	    if(!(md->hdr.isa_flags & ISAKMP_FLAGS_R)) {
+-		if(st->st_msgid_last_remotereq != INVALID_MSGID && st->st_msgid_last_remotereq > md->msgid_received){
+-		/* this is an OLD retransmit. we can't do anything */
+-		openswan_log("received too old retransmit, ignoring: %u < %u"
+-			     , md->msgid_received, st->st_msgid_last_remotereq);
+-		return;
++	if(st != NULL) {
++		if (st->st_msgid_last_localreq != INVALID_MSGID &&  md->msgid_received <=  st->st_msgid_last_localreq) {
++			/* this is an OLD retransmit. we can't do anything */
++			DBG(DBG_CONTROL,
++				DBG_log("responding peer retransmitted msgid %u",
++					md->msgid_received));
++			return;
+ 		}
+-		if(st->st_msgid_last_remotereq != INVALID_MSGID && st->st_msgid_last_remotereq == md->msgid_received){
+-		/* this is a recent retransmit. */
+-		send_ike_msg(st, "ikev2-responder-retransmit");
+-		return;
+-		}
+-	    }
+-	    else 
+-	    {
+-	    /* if it is response from Responder*/
+-		/* it seems that it should not happen 
+-		 * why a response will be retransmitted?
+-		 */
+-		if(st->st_msgid_last_localreq_ack!=INVALID_MSGID &&  st->st_msgid_last_localreq_ack >= md->msgid_received){
+-		openswan_log("received an old response, ignoring: %u < %u"
+-                             , md->msgid_received, st->st_msgid_last_localreq_ack);
+-		}
+-	    }
+ 	}
+     }
+-	
+-    ix = md->hdr.isa_xchg;
+-    if(st) {
+ 
++    ix = md->hdr.isa_xchg;
++    if(st != NULL) {
+ 	from_state = st->st_state;
+     }
+ 
+     for(svm = v2_state_microcode_table; svm->state != STATE_IKEv2_ROOF; svm++) {
+ 	if(svm->flags & SMF2_STATENEEDED) {
+ 	    if(st==NULL) continue;
+-	}
+-	if((svm->flags&SMF2_STATENEEDED)==0) {
++	} else {
+ 	    if(st!=NULL) continue;
+ 	}
+ 	if(svm->state != from_state) continue;
+ 	if(svm->recv_type != ix) continue;
+ 	
++	if (ix != ISAKMP_v2_INFORMATIONAL &&
++		(((svm->flags&SMF2_INITIATOR) != 0) != ((md->hdr.isa_flags & ISAKMP_FLAGS_R) != 0)))
++			continue;
++
+ 	/* must be the right state */
+ 	break;
+     }
+ 
+     if(svm->state == STATE_IKEv2_ROOF) {
++	DBG(DBG_CONTROL, DBG_log("ended up with STATE_IKEv2_ROOF"));
+ 
+ 	/* no useful state */
+ 	if(md->hdr.isa_flags & ISAKMP_FLAGS_I) {
+@@ -542,6 +511,7 @@
+ 	return;
+     }
+ 
++
+     md->svm = svm;
+     md->from_state = from_state;
+     md->st = st;
+@@ -573,6 +543,8 @@
+     /* struct state *const st = md->st; */
+     unsigned int hisID = (init==INITIATOR) ?
+ 	ISAKMP_NEXT_v2IDr : ISAKMP_NEXT_v2IDi;
++
++
+     /* unsigned int myID  = initiator ? ISAKMP_NEXT_v2IDi: ISAKMP_NEXT_v2IDr;
+      * struct payload_digest *const id_me  = md->chain[myID];
+      */
+@@ -717,7 +689,7 @@
+ 			 md->hdr.isa_icookie, md->hdr.isa_rcookie, data);
+ }
+ 
+-void ikev2_update_counters(struct msg_digest *md, enum ikev2_msgtype msgtype)
++void ikev2_update_counters(struct msg_digest *md)
+ {
+     struct state *pst= md->pst;
+     struct state *st = md->st;
+@@ -730,20 +702,82 @@
+     }
+     
+ 
+-	switch(msgtype) {
+-	case req_sent:
+-		pst->st_msgid_last_localreq = pst->st_msgid_last_localreq == INVALID_MSGID? 0 : pst->st_msgid_last_localreq + 1;
++	switch(md->role) {
++	case INITIATOR:
++		pst->st_msgid_last_localreq =  md->msgid_received;
++		if (pst->st_msgid_last_localreq <= pst->st_msgid_last_localreq_ack)
++			pst->st_msgid_last_localreq_ack = pst->st_msgid_last_localreq +1;
+ 		break;
+-	case req_recd:
+-		break;
+-	case response_sent:
++	case RESPONDER:
+ 		pst->st_msgid_last_remotereq = md->msgid_received;
+-		break;
+-	case response_recd:
+-		pst->st_msgid_last_localreq_ack = md->msgid_received;
+-		break;
+-	default: break;
++		pst->st_msgid_last_localreq_ack = md->msgid_received + 1;
++	}
++}
++
++time_t ikev2_replace_delay(struct state *st, enum event_type *pkind,
++		enum phase1_role role)
++{
++	enum event_type kind = *pkind;
++	time_t delay;   /* unwrapped deltatime_t */
++	struct connection *c = st->st_connection;
++
++	if (IS_PARENT_SA(st)) {
++		/* Note: we will defer to the "negotiated" (dictated)
++		 * lifetime if we are POLICY_DONT_REKEY.
++		 * This allows the other side to dictate
++		 * a time we would not otherwise accept
++		 * but it prevents us from having to initiate
++		 * rekeying.  The negative consequences seem
++		 * minor.
++		 */
++		delay = c->sa_ike_life_seconds;
++	} else {
++		/* Delay is what the user said, no negotiation. */
++		delay = c->sa_ipsec_life_seconds;
+ 	}
++
++	/* By default, we plan to rekey.
++	 *
++	 * If there isn't enough time to rekey, plan to
++	 * expire.
++	 *
++	 * If we are --dontrekey, a lot more rules apply.
++	 * If we are the Initiator, use REPLACE_IF_USED.
++	 * If we are the Responder, and the dictated time
++	 * was unacceptable (too large), plan to REPLACE
++	 * (the only way to ratchet down the time).
++	 * If we are the Responder, and the dictated time
++	 * is acceptable, plan to EXPIRE.
++	 *
++	 * Important policy lies buried here.
++	 * For example, we favour the initiator over the
++	 * responder by making the initiator start rekeying
++	 * sooner.  Also, fuzz is only added to the
++	 * initiator's margin.
++	 *
++	 * Note: for ISAKMP SA, we let the negotiated
++	 * time stand (implemented by earlier logic).
++	 */
++	if (kind != EVENT_SA_EXPIRE) {
++		/* unwrapped deltatime_t */
++		time_t marg = c->sa_rekey_margin;
++
++		if (role == INITIATOR) {
++			marg += marg *
++				c->sa_rekey_fuzz / 100.E0 *
++				(rand() / (RAND_MAX + 1.E0));
++		} else {
++			marg /= 2;
++		}
++
++		if (delay > marg) {
++			delay -= marg;
++			st->st_margin = marg;
++		} else {
++			*pkind = kind = EVENT_SA_EXPIRE;
++		}
++	}
++	return delay;
+ }
+ 
+ static void success_v2_state_transition(struct msg_digest **mdp)
+@@ -754,16 +788,19 @@
+     struct state *st = md->st;
+     enum rc_type w;
+ 
+-    openswan_log("transition from state %s to state %s"
++    if (from_state != svm->next_state) {
++        openswan_log("transition from state %s to state %s"
+                  , enum_name(&state_names, from_state)
+                  , enum_name(&state_names, svm->next_state));
++    }
+ 
+     change_state(st, svm->next_state);
+     w = RC_NEW_STATE + st->st_state;    
+ 
++    ikev2_update_counters(md);
+ 
+     /* tell whack and log of progress */
+-    {
++    if (from_state != svm->next_state){
+ 	const char *story = enum_name(&state_stories, st->st_state);
+ 	char sadetails[128];
+ 
+@@ -852,10 +889,14 @@
+ 	/* XXX should call unpend again on parent SA */
+ 	if(st->st_clonedfrom != 0) {
+ 	    pst = state_with_serialno(st->st_clonedfrom);
+-	    DBG_log("releasing whack and unpending for #%lu (sock=%d)"
++	    if (pst == NULL) {
++		DBG_log("no parent to release whack or unpend, skipped");
++	    } else {
++	        DBG_log("releasing whack and unpending for #%lu (sock=%d)"
+ 		    , pst->st_serialno, pst->st_whack_sock);
+-	    unpend(pst);
+-	    release_whack(pst);
++	        unpend(pst);
++	        release_whack(pst);
++	    }
+ 	}
+     }
+ 
+@@ -863,73 +904,13 @@
+     {
+ 	time_t delay;
+ 	enum event_type kind = svm->timeout_event;
+-	struct connection *c = st->st_connection;
+ 
+ 	switch (kind)
+ 	{
+ 	case EVENT_SA_REPLACE:	/* SA replacement event */
+-	    if (IS_PARENT_SA(st))
+-	    {
+-		/* Note: we will defer to the "negotiated" (dictated)
+-		 * lifetime if we are POLICY_DONT_REKEY.
+-		 * This allows the other side to dictate
+-		 * a time we would not otherwise accept
+-		 * but it prevents us from having to initiate
+-		 * rekeying.  The negative consequences seem
+-		 * minor.
+-		 */
+-		delay = c->sa_ike_life_seconds;
+-	    }
+-	    else
+-	    {
+-		/* Delay is what the user said, no negotiation.
+-		 */
+-		delay = c->sa_ipsec_life_seconds;
+-	    }
+-	    
+-	    /* By default, we plan to rekey.
+-	     *
+-	     * If there isn't enough time to rekey, plan to
+-	     * expire.
+-	     *
+-	     * If we are --dontrekey, a lot more rules apply.
+-	     * If we are the Initiator, use REPLACE_IF_USED.
+-	     * If we are the Responder, and the dictated time
+-	     * was unacceptable (too large), plan to REPLACE
+-	     * (the only way to ratchet down the time).
+-	     * If we are the Responder, and the dictated time
+-	     * is acceptable, plan to EXPIRE.
+-	     *
+-	     * Important policy lies buried here.
+-	     * For example, we favour the initiator over the
+-	     * responder by making the initiator start rekeying
+-	     * sooner.  Also, fuzz is only added to the
+-	     * initiator's margin.
+-	     *
+-	     * Note: for ISAKMP SA, we let the negotiated
+-	     * time stand (implemented by earlier logic).
+-	     */
+-	    if (kind != EVENT_SA_EXPIRE)
+-	    {
+-		unsigned long marg = c->sa_rekey_margin;
+-		
+-		if (svm->flags & SMF2_INITIATOR)
+-		    marg += marg
+-			* c->sa_rekey_fuzz / 100.E0
+-			* (rand() / (RAND_MAX + 1.E0));
+-		else
+-		    marg /= 2;
+-		
+-		if ((unsigned long)delay > marg)
+-		{
+-			    delay -= marg;
+-			    st->st_margin = marg;
+-		}
+-		else
+-		{
+-		    kind = EVENT_SA_EXPIRE;
+-		}
+-	    }
++	    delay = ikev2_replace_delay(st, &kind,
++		(svm->flags & SMF2_INITIATOR) ?
++		INITIATOR : RESPONDER);
+ 	    delete_event(st);
+ 	    event_schedule(kind, delay, st);
+ 	    break;
+@@ -955,21 +936,23 @@
+     enum state_kind from_state;
+     const char *from_state_name;
+ 
+-    /* advance the state */
+-    DBG(DBG_CONTROL
+-        , DBG_log("complete v2 state transition with %s"
+-                  , enum_name(&stfstatus_name, result)));
++    cur_state = st = md->st; /* might have changed */
+ 
+-    /* this occur when IKE SA state is deleted already */
+-    if(md->st == NULL) {
+-	goto end;
+-    }
+-
+-    cur_state = st = md->st;	/* might have changed */
+-
+-    md->result = result;
+-    TCLCALLOUT("v2AdjustFailure", st, (st ? st->st_connection : NULL), md);
+-    result = md->result;
++    if (st != NULL) {
++                from_state = st->st_state;
++                from_state_name = enum_name(&state_names, from_state);
++        } else {
++                from_state_name = "no-state";
++        }
++
++        md->result = result;
++
++
++        /* advance the state */
++        DBG(DBG_CONTROL,
++            DBG_log("complete v2 state transition with %s",
++                    enum_name(&stfstatus_name,
++                              result > STF_FAIL ? STF_FAIL : result)));
+ 
+ 
+     switch(result) {
+@@ -1060,7 +1043,7 @@
+ 		    , from_state_name
+ 		    , enum_name(&ipsec_notification_names, md->note)));
+     }
+-end:;
++
+ }
+ 
+ notification_t
+diff -Naur openswan-2.6.32-orig/programs/pluto/ikev2.h openswan-2.6.32/programs/pluto/ikev2.h
+--- openswan-2.6.32-orig/programs/pluto/ikev2.h	2014-07-18 19:32:51.610000000 -0400
++++ openswan-2.6.32/programs/pluto/ikev2.h	2014-07-18 19:33:28.131000000 -0400
+@@ -176,7 +176,7 @@
+ 					 , pb_stream *outpbs);
+ 
+ extern struct traffic_selector ikev2_subnettots(struct end *e);
+-extern void ikev2_update_counters(struct msg_digest *md, enum ikev2_msgtype msgtype);
++extern void ikev2_update_counters(struct msg_digest *md);
+ 
+ extern void send_v2_notification(struct state *p1st, u_int16_t type
+ 				 , struct state *encst 
+@@ -197,3 +197,10 @@
+ 
+ extern bool force_busy;  /* config option to emulate responder under DOS */
+ 
++extern void v2_delete_my_family(struct state *pst, enum phase1_role role);
++
++extern time_t ikev2_replace_delay(struct state *st, enum event_type *pkind,
++			enum phase1_role role);
++
++extern stf_status ikev2_send_informational(struct state *st);
++
+diff -Naur openswan-2.6.32-orig/programs/pluto/ikev2_parent.c openswan-2.6.32/programs/pluto/ikev2_parent.c
+--- openswan-2.6.32-orig/programs/pluto/ikev2_parent.c	2014-07-18 19:32:51.611000000 -0400
++++ openswan-2.6.32/programs/pluto/ikev2_parent.c	2014-07-18 19:33:28.133000000 -0400
+@@ -120,8 +120,7 @@
+     st->st_ikev2 = TRUE;
+     change_state(st, STATE_PARENT_I1);
+     st->st_msgid_last_localreq = INVALID_MSGID;
+-    st->st_msgid_last_localreq_ack = INVALID_MSGID;
+-    st->st_msgid_last_remotereq=INVALID_MSGID;	
++    st->st_msgid_last_localreq_ack = 0;
+     st->st_try   = try;
+ 
+     if (HAS_IPSEC_POLICY(policy)) {
+@@ -468,7 +467,6 @@
+ 
+     /* Transmit */
+     send_ike_msg(st, __FUNCTION__);
+-    ikev2_update_counters(md, req_sent);
+ 
+     /* Set up a retransmission event, half a minute henceforth */
+     TCLCALLOUT("v2_adjustTimers", st, st->st_connection, md);
+@@ -550,8 +548,7 @@
+ 	st->st_ikev2 = TRUE;
+ 	change_state(st, STATE_PARENT_R1);
+ 	st->st_msgid_last_localreq = INVALID_MSGID;
+-	st->st_msgid_last_localreq_ack = INVALID_MSGID;
+-	st->st_msgid_last_remotereq=INVALID_MSGID;
++	st->st_msgid_last_localreq_ack = 0;
+ 
+ 	md->st = st;
+ 	md->from_state = STATE_IKEv2_BASE;
+@@ -829,8 +826,6 @@
+ 
+     /* note: retransimission is driven by initiator */
+ 
+-   ikev2_update_counters(md, response_sent);
+-
+     return STF_OK;
+     
+ }
+@@ -881,8 +876,8 @@
+ 
+ 		change_state(st, STATE_PARENT_I1);
+ 		st->st_msgid_last_localreq = INVALID_MSGID;
+-		st->st_msgid_last_localreq_ack = INVALID_MSGID;
+-		st->st_msgid_last_remotereq=INVALID_MSGID;
++		md->msgid_received = INVALID_MSGID; /* AAA hack  */
++		st->st_msgid_last_localreq_ack = 0;
+ 
+ 		return ikev2_parent_outI1_common(md, st);  
+     }
+@@ -921,7 +916,7 @@
+     }
+ 
+     /* update state counters */
+-    ikev2_update_counters(md, response_recd);
++    ikev2_update_counters(md);
+ 
+     /* now. we need to go calculate the g^xy */
+     {
+@@ -1257,6 +1252,8 @@
+     unsigned char *authstart;
+     struct state *pst = st;
+     bool send_cert = FALSE;
++    time_t delay;
++    enum event_type x = EVENT_SA_REPLACE;
+ 
+     finish_dh_v2(st, r);
+ 
+@@ -1266,14 +1263,15 @@
+ 
+     pst = st;
+     st = duplicate_state(pst);
+-    st->st_msgid = htonl(pst->st_msgid_last_localreq == INVALID_MSGID? 0 : pst->st_msgid_last_localreq + 1);
++    st->st_msgid = htonl(pst->st_msgid_last_localreq_ack);
+     insert_state(st);
+     md->st = st;
+     md->pst= pst;
+ 
+     /* parent had crypto failed, replace it with rekey! */
+     delete_event(pst);
+-    event_schedule(EVENT_SA_REPLACE, c->sa_ike_life_seconds, pst);
++    delay = ikev2_replace_delay(st, &x, INITIATOR);
++    event_schedule(EVENT_SA_REPLACE, delay, pst);
+ 
+     /* need to force parent state to I2 */
+     change_state(pst, STATE_PARENT_I2);
+@@ -1462,7 +1460,6 @@
+     delete_event(st);
+     event_schedule(EVENT_v2_RETRANSMIT, EVENT_RETRANSMIT_DELAY_0, st);
+ 
+-    ikev2_update_counters(md, req_sent);
+     return STF_OK;
+     
+ }
+@@ -1581,6 +1578,8 @@
+     unsigned char *idhash_in, *idhash_out;
+     unsigned char *authstart;
+     unsigned int np;
++    time_t delay;
++    enum event_type x = EVENT_SA_REPLACE;
+ 
+     /* extract calculated values from r */
+     finish_dh_v2(st, r);
+@@ -1697,7 +1696,8 @@
+     c->newest_isakmp_sa = st->st_serialno;
+ 
+     delete_event(st);
+-    event_schedule(EVENT_SA_REPLACE, c->sa_ike_life_seconds, st);
++    delay = ikev2_replace_delay(st, &x, RESPONDER);
++    event_schedule(EVENT_SA_REPLACE, delay, st);
+     
+     authstart = reply_stream.cur;
+     /* send response */
+@@ -1871,7 +1871,6 @@
+ 
+     /* note: retransimission is driven by initiator */
+ 
+-    ikev2_update_counters(md, response_sent);
+     return STF_OK;
+     
+ }
+@@ -2213,7 +2212,6 @@
+      * Delete previous retransmission event.
+      */
+     delete_event(st);
+-    ikev2_update_counters(md, response_recd);
+ 
+     return STF_OK;
+     
+@@ -2277,9 +2275,8 @@
+ 		     , chunk_t *n_data)
+ {
+     u_char buffer[1024];
+-    pb_stream reply;
+     pb_stream rbody;
+-	chunk_t child_spi;
++	
+ 	/* this function is not generic enough yet just enough for 6msg 
+ 	 * TBD accept HDR FLAGS as arg. default ISAKMP_FLAGS_R
+ 	 * TBD when there is a child SA use that SPI in the notify paylod.
+@@ -2302,7 +2299,7 @@
+ 	}
+ 
+     memset(buffer, 0, sizeof(buffer));
+-    init_pbs(&reply, buffer, sizeof(buffer), "notification msg");
++    init_pbs(&reply_stream, buffer, sizeof(buffer), "notification msg");
+ 
+     /* HDR out */
+     {
+@@ -2315,25 +2312,26 @@
+ 	n_hdr.isa_np = ISAKMP_NEXT_v2N;
+ 	n_hdr.isa_flags &= ~ISAKMP_FLAGS_I;
+ 	n_hdr.isa_flags  |=  ISAKMP_FLAGS_R;
+-	if (!out_struct(&n_hdr, &isakmp_hdr_desc, &reply, &rbody)) 
++	if (!out_struct(&n_hdr, &isakmp_hdr_desc, &reply_stream, &rbody)) 
+ 	{
+     	    openswan_log("error initializing hdr for notify message");
+ 	    return;
+ 	}
+ 		
+     } 
+-	child_spi.ptr = NULL;
+-	child_spi.len = 0;
+ 
+ 	/* build and add v2N payload to the packet */
+-	ship_v2N (ISAKMP_NEXT_NONE, ISAKMP_PAYLOAD_NONCRITICAL, PROTO_ISAKMP,
+-				    &child_spi, 
+-					type, n_data, &rbody);
++	if (!ship_v2N(ISAKMP_NEXT_NONE, ISAKMP_PAYLOAD_NONCRITICAL, PROTO_ISAKMP,
++				    &empty_chunk, 
++					type, n_data, &rbody))
++		return;
+ 
+    close_message(&rbody);
+-   close_output_pbs(&reply); 
+ 
+-   clonetochunk(p1st->st_tpacket, reply.start, pbs_offset(&reply)
++
++   close_output_pbs(&reply_stream); 
++
++   clonetochunk(p1st->st_tpacket, reply_stream.start, pbs_offset(&reply_stream)
+ 		                    , "notification packet");
+ 
+    send_ike_msg(p1st, __FUNCTION__);
+@@ -2368,15 +2366,50 @@
+ 
+    		}
+     }
++    if (n_data != NULL) {
+    	if (!out_raw(n_data->ptr, n_data->len, &n_pbs, "Notifiy data"))
+    	{
+ 		openswan_log("error writing notify payload for notify message");
+    		return FALSE;
++	}
+     }
+     close_output_pbs(&n_pbs);
+ 	return TRUE;
+ }
+-	     
++
++void v2_delete_my_family(struct state *pst, enum phase1_role role)
++{
++	/* We are a parent: delete our children and
++	 * then prepare to delete ourself.
++	 * Our children will be on the same hash chain
++	 * because we share IKE SPIs.
++	 */
++	struct state *st;
++
++	/* find first in chain */
++	for (st = pst; st->st_hashchain_prev != NULL; )
++		st = st->st_hashchain_prev;
++
++	/* delete each of our children */
++	while (st != NULL) {
++		/* since we might be deleting st, we need to
++		 * grab onto its successor first
++		 */
++		struct state *next_st = st->st_hashchain_next;
++
++		if (st->st_clonedfrom == pst->st_serialno) {
++			if (role == RESPONDER)
++				change_state(st, STATE_CHILDSA_DEL);
++			delete_state(st);
++		}
++		st = next_st;
++	}
++
++	/* delete self */
++	if (role == RESPONDER)
++		change_state(pst, STATE_IKESA_DEL);
++	delete_state(pst);
++}
+ /*
+  *
+  ***************************************************************
+@@ -2388,6 +2421,8 @@
+  */
+ stf_status process_informational_ikev2(struct msg_digest *md)
+ {
++    enum phase1_role prole;
++
+     /* verify that there is in fact an encrypted payload */
+     if(!md->chain[ISAKMP_NEXT_v2E]) {
+ 	openswan_log("Informational exchange should receive an encrypted payload");
+@@ -2397,27 +2432,42 @@
+     /* decrypt things. */
+     {
+ 	stf_status ret; 
++	struct state *ost = md->st;
+ 
+-	if(!(md->hdr.isa_flags & ISAKMP_FLAGS_R)) {
+-	DBG(DBG_CONTROLMORE
+-		, DBG_log("received informational exchange request from %s", md->role == 1? "RESPONDER": "INITIATOR"));
+-	ret = ikev2_decrypt_msg(md, md->role);
+-	}
+-	else {
+-	DBG(DBG_CONTROLMORE
+-		, DBG_log("received informational exchange response from %s", md->role == 1?"RESPONDER": "INITIATOR"));
+-	ret = ikev2_decrypt_msg(md, md->role);
+-	}
++	if (IS_V2_INITIATOR(ost->st_state)) {
++		prole = INITIATOR;
++		DBG(DBG_CONTROLMORE,
++			DBG_log("received informational exchange request from the original responder"));
++		ret = ikev2_decrypt_msg(md, INITIATOR);
++		} else {
++			prole = RESPONDER;
++			DBG(DBG_CONTROLMORE,
++				DBG_log("received informational exchange request from the original initiator"));
++			ret = ikev2_decrypt_msg(md, RESPONDER);
++		}
+ 
+-	if(ret != STF_OK) return ret;
++		if (ret != STF_OK)
++			return ret;
+     }
+ 
+-
+     {
+ 	struct payload_digest *p;
+-	struct ikev2_delete *v2del=NULL;
+ 	stf_status ret;
+-	struct state *const st = md->st;
++	struct state *st = md->st;
++
++	if (IS_CHILD_SA(st)) {
++		/* we picked incomplete child, change to parent */
++		so_serial_t c_serialno = st->st_serialno;
++
++		st = state_with_serialno(st->st_clonedfrom);
++		if (st == NULL)
++			return STF_INTERNAL_ERROR;
++		md->st = st;
++		set_cur_state(st);
++		DBG(DBG_CONTROLMORE,
++			 DBG_log("Informational exchange matched Child SA #%lu - switched to its Parent SA #%lu",
++				c_serialno, st->st_serialno));
++	}
+ 
+ 	/* Only send response if it is request*/
+ 	if (!(md->hdr.isa_flags & ISAKMP_FLAGS_R)) {
+@@ -2428,12 +2478,13 @@
+ 	int            ivsize;
+ 	unsigned char *encstart;
+ 
++	/* beginning of data going out */
++	authstart = reply_stream.cur;
++
+ 	/* make sure HDR is at start of a clean buffer */
+ 	zero(reply_buffer);
+ 	init_pbs(&reply_stream, reply_buffer, sizeof(reply_buffer), "information exchange reply packet");
+ 
+-	/* beginning of data going out */
+-	authstart = reply_stream.cur;
+ 
+ 	/* HDR out */
+ 	{
+@@ -2445,12 +2496,6 @@
+ 		r_hdr.isa_xchg = ISAKMP_v2_INFORMATIONAL;
+ 		r_hdr.isa_np = ISAKMP_NEXT_v2E;
+ 		r_hdr.isa_msgid = htonl(md->msgid_received);
+-
+-		/*set initiator bit if we are initiator*/
+-		if(md->role == INITIATOR) {
+-		r_hdr.isa_flags |= ISAKMP_FLAGS_I;
+-		}
+-
+ 		r_hdr.isa_flags  |=  ISAKMP_FLAGS_R;
+ 
+ 
+@@ -2464,31 +2509,26 @@
+ 
+ 
+ 	/* insert an Encryption payload header */
+-	if(md->chain[ISAKMP_NEXT_v2D]) 
++	e.isag_np = ISAKMP_NEXT_NONE;
++	if(md->chain[ISAKMP_NEXT_v2D] != NULL) 
+ 	{
+-		bool ikesa_flag = FALSE;
+-		/* Search if there is a IKE SA delete payload*/
+-		for(p = md->chain[ISAKMP_NEXT_v2D]; p!=NULL; p = p->next) {
+-			if(p->payload.v2delete.isad_protoid == PROTO_ISAKMP) 
+-			{
+-			e.isag_np = ISAKMP_NEXT_NONE;
+-			ikesa_flag = TRUE; 
+-			break;
++		/* IKE SA delete payloads are always by themselves */
++		struct ikev2_delete *v2del = &md->chain[ISAKMP_NEXT_v2D]->payload.v2delete;
++
++		if (v2del->isad_protoid == PROTO_ISAKMP) {
++			if (md->chain[ISAKMP_NEXT_v2D]->next != NULL) {
++				openswan_log("IKE SA Delete must be the only payload");
++				return STF_FAIL + INVALID_SYNTAX;
+ 			}
++			if (v2del->isad_nospi != 0 || v2del->isad_spisize != 0) {
++				openswan_log("IKE SA Delete has non-zero SPI size or number of SPIs");
++				return STF_FAIL + INVALID_SYNTAX;
++			}
++		} else {
++			 e.isag_np = ISAKMP_NEXT_v2D;
+ 		}
+-		/* if there is no IKE SA DELETE PAYLOAD*/
+-		/* That means, there are AH OR ESP*/
+-		if(!ikesa_flag) { 
+-			e.isag_np = ISAKMP_NEXT_v2D;
+-		}
+-	
+-
+ 	}
+-	else 
+-	{
+-		e.isag_np = ISAKMP_NEXT_NONE;
+-	}
+-
++		
+ 	e.isag_critical = ISAKMP_PAYLOAD_NONCRITICAL;
+ 
+ 	if(!out_struct(&e, &ikev2_e_desc, &md->rbody, &e_pbs)) {
+@@ -2510,10 +2550,8 @@
+ 	e_pbs_cipher.cur = e_pbs.cur;
+ 	encstart = e_pbs_cipher.cur;
+ 
+-	if(md->chain[ISAKMP_NEXT_v2D]) {
+-
+-		for(p = md->chain[ISAKMP_NEXT_v2D]; p!=NULL; p = p->next) {
+-		v2del = &p->payload.v2delete;
++	for(p = md->chain[ISAKMP_NEXT_v2D]; p!=NULL; p = p->next) {
++		struct ikev2_delete *v2del = &p->payload.v2delete;
+ 
+ 			switch (v2del->isad_protoid) 
+ 			{
+@@ -2521,6 +2559,11 @@
+ 				/* My understanding is that delete payload for IKE SA 
+ 				 *  should be the only payload in the informational exchange
+ 				 */ 
++				if (p != md->chain[ISAKMP_NEXT_v2D]) {
++					openswan_log(
++					"IKE SA delete cannot be mixed with IPsec SA Deletes.");
++					return STF_FAIL + INVALID_SYNTAX;
++				}
+ 				break;
+ 
+ 			case PROTO_IPSEC_AH:
+@@ -2611,13 +2654,7 @@
+ 				return STF_IGNORE;
+ 			}
+ 
+-			/* this will break from for loop*/
+-			if(v2del->isad_protoid == PROTO_ISAKMP) {
+-			break;
+-			}
+-
+ 		}
+-	}
+ 
+ 	/*If there are no payloads or in other words empty payload in request
+ 	 * that means it is check for liveliness, so send an empty payload message
+@@ -2625,6 +2662,7 @@
+ 	 */
+ 
+ 	ikev2_padup_pre_encrypt(md, &e_pbs_cipher);
++
+ 	close_output_pbs(&e_pbs_cipher);
+ 
+ 	{
+@@ -2634,14 +2672,13 @@
+ 	close_output_pbs(&md->rbody);
+ 	close_output_pbs(&reply_stream);
+ 
+-	ret = ikev2_encrypt_msg(md, md->role,
++	ret = ikev2_encrypt_msg(md, prole,
+                                     authstart,
+                                     iv, encstart, authloc,
+                                     &e_pbs, &e_pbs_cipher);
+ 	if(ret != STF_OK) return ret;
+         }
+ 
+-
+ 	/* let TCL hack it before we mark the length. */
+ 	TCLCALLOUT("v2_avoidEmitting", st, st->st_connection, md);
+ 
+@@ -2651,68 +2688,37 @@
+ 			, "reply packet for informational exchange");
+ 
+ 	send_ike_msg(st, __FUNCTION__);
+-	ikev2_update_counters(md, response_sent);
+ 	}
+ 
+ 	/* Now carry out the actualy task, we can not carry the actual task since 
+  	* we need to send informational responde using existig SAs
+  	*/
+ 
+-	if(md->hdr.isa_flags & ISAKMP_FLAGS_R){
+-		ikev2_update_counters(md, response_recd);
+-	}
+-
+-	{
+-		if(md->chain[ISAKMP_NEXT_v2D]) {
++		if(md->chain[ISAKMP_NEXT_v2D] &&
++			st->st_state != STATE_IKESA_DEL) {
+ 
+ 		for(p = md->chain[ISAKMP_NEXT_v2D]; p!=NULL; p = p->next) {
+-		v2del = &p->payload.v2delete;
++		struct ikev2_delete  *v2del = &p->payload.v2delete;
+ 
+ 			switch (v2del->isad_protoid) 
+ 			{
+ 			case PROTO_ISAKMP: 
+-				{
+-				/* My understanding is that delete payload for IKE SA 
+-				 *  should be the only payload in the informational
+-				 * Now delete the IKE SA state and all its child states
+-				 */
+-				struct state *current_st = st;
+-				struct state *next_st = NULL;
+-				struct state *first_st = NULL;
+-
+-				/* Find the first state in the hash chain*/
+-				while(current_st != (struct state *) NULL) 
+-				{
+-				first_st = current_st;
+-				current_st = first_st->st_hashchain_prev;
+-				}
+-				
+-				current_st = first_st;
+-				while (current_st != (struct state *) NULL) 
+-				{
+-				next_st = current_st->st_hashchain_next;
+-					if(current_st->st_clonedfrom !=0 )
+-					{
+-						change_state(current_st, STATE_CHILDSA_DEL);
+-					}
+-					else
+-					{
+-						change_state(current_st, STATE_IKESA_DEL);
+-						md->st = NULL;
+-						md->pst = NULL;
+-					}
+-        			delete_state(current_st);
+-				current_st = next_st;
+-				}
+-				}
++				v2_delete_my_family(st, RESPONDER);
+ 				break;
+ 
+ 			case PROTO_IPSEC_AH:
+ 			case PROTO_IPSEC_ESP:
+-				{				
++				{
++				struct ikev2_delete;
+ 				u_int16_t i;
+ 				u_char *spi;
+ 
++				if (v2del->isad_spisize != sizeof(ipsec_spi_t)) {
++					openswan_log("IPsec Delete SPI size should be 4 but is %d",
++						v2del->isad_spisize);
++					return STF_FAIL + INVALID_SYNTAX;
++				}
++
+ 				for(i = 0; i < v2del->isad_nospi; i++ ) 
+ 				{
+ 					spi = p->pbs.cur + (i * v2del->isad_spisize);
+@@ -2727,10 +2733,9 @@
+ 
+ 					if(dst != NULL) 
+ 					{
+-						struct ipsec_proto_info *pr = v2del->isad_protoid == PROTO_IPSEC_AH? &dst->st_ah : &dst->st_esp;
+ 						DBG(DBG_CONTROLMORE, DBG_log("our side spi that needs to be deleted: %s SA(0x%08lx)"
+                                                                 , enum_show(&protocol_names, v2del->isad_protoid)
+-                                                                , (unsigned long)ntohl(pr->our_spi)));
++                                                                , (unsigned long)ntohl(*(ipsec_spi_t *)spi)));
+ 						
+ 						/* now delete the state*/
+ 						change_state(dst, STATE_CHILDSA_DEL);
+@@ -2762,50 +2767,145 @@
+ 		else 
+ 		{
+ 			/* empty response to our IKESA delete request*/
+-			if((md->hdr.isa_flags & ISAKMP_FLAGS_R) && st->st_state == STATE_IKESA_DEL)
+-			{
+-				/* My understanding is that delete payload for IKE SA 
+-				 *  should be the only payload in the informational
+-				 * Now delete the IKE SA state and all its child states
+-				 */
+-				struct state *current_st = st;
+-				struct state *next_st = NULL;
+-				struct state *first_st = NULL;
+-
+-				/* Find the first state in the hash chain*/
+-				while(current_st != (struct state *) NULL) 
+-				{
+-				first_st = current_st;
+-				current_st = first_st->st_hashchain_prev;
++			if (md->hdr.isa_flags & ISAKMP_FLAGS_R) {
++				if (st->st_state == STATE_IKESA_DEL) {
++					/* My understanding is that delete payload for IKE SA 
++					 *  should be the only payload in the informational
++					 * Now delete the IKE SA state and all its child states
++					 */
++					v2_delete_my_family(st, RESPONDER);
++				} else {
++					st->st_msgid_last_remotereq = md->msgid_received;
+ 				}
+-				
+-				current_st = first_st;
+-				while (current_st != (struct state *) NULL) 
+-				{
+-				next_st = current_st->st_hashchain_next;
+-					if(current_st->st_clonedfrom !=0 )
+-					{
+-						change_state(current_st, STATE_CHILDSA_DEL);
+-					}
+-					else
+-					{
+-						change_state(current_st, STATE_IKESA_DEL);
+-						md->st = NULL;
+-						md->pst = NULL;
+-					}
+-        			delete_state(current_st);
+-				current_st = next_st;
+-				}
+-				
+ 			}
+ 		}
+ 	}
+ 
+-    }
+-
+     return STF_OK;
+ }
+ 
++stf_status ikev2_send_informational(struct state *st)
++{
++	struct state *pst = st;
++
++	if (IS_CHILD_SA(st)) {
++		pst = state_with_serialno(st->st_clonedfrom);
++		if (pst == NULL) {
++			DBG(DBG_CONTROL,
++			    DBG_log("IKE SA does not exist for this child SA - should not happen"));
++			DBG(DBG_CONTROL,
++			    DBG_log("INFORMATIONAL exchange can not be sent"));
++			return STF_IGNORE;
++		}
++	}
++
++	{
++		/* buffer in which to marshal our informational message.
++		 * We don't use reply_buffer/reply_stream because they might be in use.
++		 */
++		u_char buffer[1024];	/* ??? large enough for any informational? */
++		unsigned char *authstart;
++		unsigned char *encstart;
++		unsigned char *iv;
++		int ivsize;
++		struct msg_digest md;
++		struct ikev2_generic e;
++		pb_stream e_pbs, e_pbs_cipher;
++		pb_stream rbody;
++		pb_stream reply_stream;
++
++		md.st = st;
++		md.pst = pst;
++		zero(&buffer);
++		init_pbs(&reply_stream, buffer, sizeof(buffer),
++			 "informational exchange request packet");
++		authstart = reply_stream.cur;
++
++		/* HDR out */
++		{
++			struct isakmp_hdr r_hdr;
++			zero(&r_hdr);
++			r_hdr.isa_version = IKEv2_MAJOR_VERSION << ISA_MAJ_SHIFT | IKEv2_MINOR_VERSION;
++			memcpy(r_hdr.isa_rcookie, pst->st_rcookie,
++			       COOKIE_SIZE);
++			memcpy(r_hdr.isa_icookie, pst->st_icookie,
++			       COOKIE_SIZE);
++			r_hdr.isa_xchg = ISAKMP_v2_INFORMATIONAL;
++			r_hdr.isa_np = ISAKMP_NEXT_v2E;
++			r_hdr.isa_flags |= ISAKMP_FLAGS_I;
++			r_hdr.isa_msgid = htonl(pst->st_msgid_last_localreq_ack);
++
++			/* encryption role based on original state not md state */
++			if (IS_V2_INITIATOR(pst->st_state))
++				md.role = INITIATOR;
++			else
++				md.role = RESPONDER;
++
++			if (!out_struct(&r_hdr, &isakmp_hdr_desc,
++					&reply_stream, &rbody)) {
++				openswan_log(
++					"error initializing hdr for informational message");
++				return STF_FATAL;
++			}
++		} /* HDR done*/
++
++		/* insert an Encryption payload header */
++		e.isag_np = ISAKMP_NEXT_NONE;
++		e.isag_critical = ISAKMP_PAYLOAD_NONCRITICAL;
++		if (!out_struct(&e, &ikev2_e_desc, &rbody, &e_pbs))
++			return STF_FATAL;
++
++		/* IV */
++		iv = e_pbs.cur;
++		ivsize = pst->st_oakley.encrypter->iv_size;
++		if (!out_zero(ivsize, &e_pbs, "iv"))
++			return STF_FATAL;
++
++		get_rnd_bytes(iv, ivsize);
++
++		/* note where cleartext starts */
++		init_pbs(&e_pbs_cipher, e_pbs.cur, e_pbs.roof - e_pbs.cur,
++			 "cleartext");
++		e_pbs_cipher.container = &e_pbs;
++		e_pbs_cipher.desc = NULL;
++		e_pbs_cipher.cur = e_pbs.cur;
++		encstart = e_pbs_cipher.cur;
++
++		/* This is an empty informational exchange (A.K.A liveness check) */
++
++		ikev2_padup_pre_encrypt(&md, &e_pbs_cipher);
++
++		close_output_pbs(&e_pbs_cipher);
++
++		{
++			stf_status ret;
++			unsigned char *authloc = ikev2_authloc(&md, &e_pbs);
++
++			if (!authloc)
++				return STF_FATAL;
++
++			close_output_pbs(&e_pbs);
++			close_output_pbs(&rbody);
++			close_output_pbs(&reply_stream);
++
++			ret = ikev2_encrypt_msg(&md, md.role,
++						authstart,
++						iv, encstart, authloc,
++						&e_pbs, &e_pbs_cipher);
++			if (ret != STF_OK)
++				return STF_FATAL;
++		}
++
++		/* keep it for a retransmit if necessary */
++		freeanychunk(pst->st_tpacket);
++		clonetochunk(pst->st_tpacket, reply_stream.start,
++			     pbs_offset(&reply_stream),
++			     "reply packet for informational exchange");
++		send_ike_msg(pst, __FUNCTION__);
++	}
++
++	return STF_OK;
++}
+ /*
+  *
+  ***************************************************************
+@@ -2848,10 +2948,9 @@
+ 
+ 	md.st = st;
+ 	md.pst= pst;
+-	/* beginning of data going out */
+ 
+ 	/* make sure HDR is at start of a clean buffer */
+-	zero(reply_buffer);
++	zero(&reply_buffer);
+ 	init_pbs(&reply_stream, reply_buffer, sizeof(reply_buffer), "information exchange request packet");
+ 
+ 	/* beginning of data going out */
+@@ -2866,7 +2965,7 @@
+ 		memcpy(r_hdr.isa_icookie, pst->st_icookie, COOKIE_SIZE);
+ 		r_hdr.isa_xchg = ISAKMP_v2_INFORMATIONAL;
+ 		r_hdr.isa_np = ISAKMP_NEXT_v2E;
+-		r_hdr.isa_msgid = htonl(pst->st_msgid_last_localreq == INVALID_MSGID? 0 : pst->st_msgid_last_localreq + 1);
++		r_hdr.isa_msgid = htonl(pst->st_msgid_last_localreq_ack);
+ 
+ 		/*set initiator bit if we are initiator*/
+ 		if(pst->st_state == STATE_PARENT_I2 || pst->st_state == STATE_PARENT_I3) {
+@@ -2887,7 +2986,6 @@
+ 
+ 
+ 	/* insert an Encryption payload header */
+-	zero(&e);
+ 	e.isag_np = ISAKMP_NEXT_v2D;
+ 	e.isag_critical = ISAKMP_PAYLOAD_NONCRITICAL;
+ 
+@@ -2977,13 +3075,15 @@
+ 
+ 	send_ike_msg(pst, __FUNCTION__);
+ 
++	pst->st_msgid_last_localreq_ack++;
++
+ 	/* update state */
+-	ikev2_update_counters(&md, req_sent);
++	ikev2_update_counters(&md);
+ 
+ 	}
+ 	
+ 	/* If everything is fine, and we sent packet, goto real_end*/
+-	goto real_end;
++	return;
+ 
+ end:
+ 	/* If some error occurs above that prevents us sending a request packet*/
+@@ -2995,36 +3095,12 @@
+ 	}
+ 	else
+ 	{
+-
+-		struct state *current_st = pst;
+-		struct state *next_st = NULL;
+-		struct state *first_st = NULL;
+-
+-		/* Find the first state in the hash chain*/
+-		while(current_st != (struct state *) NULL) {
+-		first_st = current_st;
+-		current_st = first_st->st_hashchain_prev;
+-		}
+-
+-		current_st = first_st;
+-		while (current_st != (struct state *) NULL) {
+-		next_st = current_st->st_hashchain_next;
+-			if(current_st->st_clonedfrom !=0 ){
+-				change_state(current_st, STATE_CHILDSA_DEL);
+-			}
+-			else
+-			{
+-				change_state(current_st, STATE_IKESA_DEL);
+-			}
+-		delete_state(current_st);
+-		current_st = next_st;
+-		}
++		v2_delete_my_family(st, RESPONDER);
+ 	}
+-
+-real_end:;
+ }
+ 
+ 
++
+ /*
+  * Local Variables:
+  * c-basic-offset:4
+diff -Naur openswan-2.6.32-orig/programs/pluto/ipsec_doi.c openswan-2.6.32/programs/pluto/ipsec_doi.c
+--- openswan-2.6.32-orig/programs/pluto/ipsec_doi.c	2014-07-18 19:32:51.632000000 -0400
++++ openswan-2.6.32/programs/pluto/ipsec_doi.c	2014-07-18 19:33:28.134000000 -0400
+@@ -419,7 +419,7 @@
+     int whack_sock = dup_any(st->st_whack_sock);
+     lset_t policy = st->st_policy;
+ 
+-    if (IS_PHASE1(st->st_state) || IS_PARENT_SA(st) || IS_PHASE15(st->st_state))
++    if (IS_IKE_SA(st))
+     {
+ 	struct connection *c = st->st_connection;
+ 	policy = c->policy & ~POLICY_IPSEC_MASK;
+diff -Naur openswan-2.6.32-orig/programs/pluto/log.c openswan-2.6.32/programs/pluto/log.c
+--- openswan-2.6.32-orig/programs/pluto/log.c	2010-12-17 20:23:54.000000000 -0500
++++ openswan-2.6.32/programs/pluto/log.c	2014-07-18 19:33:28.134000000 -0400
+@@ -919,10 +919,10 @@
+ 	if (st->st_state == STATE_UNDEFINED)
+ 		return;
+ 
+-	if (IS_PHASE1(st->st_state)) {
++	if (IS_IKE_SA(st)) {
+ 		if (lc->tunnel < tun_phase1)
+ 			lc->tunnel = tun_phase1;
+-		if (IS_ISAKMP_SA_ESTABLISHED(st->st_state)) {
++		if (IS_IKE_SA_ESTABLISHED(st->st_state)) {
+ 			if (lc->tunnel < tun_phase1up)
+ 				lc->tunnel = tun_phase1up;
+ 			lc->phase1 = p1_up;
+diff -Naur openswan-2.6.32-orig/programs/pluto/rcv_whack.c openswan-2.6.32/programs/pluto/rcv_whack.c
+--- openswan-2.6.32-orig/programs/pluto/rcv_whack.c	2014-07-18 19:32:51.554000000 -0400
++++ openswan-2.6.32/programs/pluto/rcv_whack.c	2014-07-18 19:33:28.135000000 -0400
+@@ -66,6 +66,7 @@
+ #include "fetch.h"
+ #include "ocsp.h"
+ #include "timer.h"
++#include "ikev2.h"
+ 
+ #include "kernel_alg.h"
+ #include "ike_alg.h"
+@@ -412,7 +413,18 @@
+ 	}
+ 	else
+ 	{
+-	    delete_state(st);
++		DBG_log("received whack to delete %s state #%lu %s",
++			st->st_ikev2 ? "IKEv2" : "IKEv1",
++			st->st_serialno,
++			enum_name(&state_names, st->st_state));
++
++		if (st->st_ikev2 && !IS_CHILD_SA(st)) {
++			DBG_log("Also deleting any corresponding CHILD_SAs");
++			v2_delete_my_family(st, INITIATOR);
++		} else {
++			delete_state(st);
++		}
++
+ 	}
+     }
+ 
+diff -Naur openswan-2.6.32-orig/programs/pluto/state.c openswan-2.6.32/programs/pluto/state.c
+--- openswan-2.6.32-orig/programs/pluto/state.c	2014-07-18 19:32:51.567000000 -0400
++++ openswan-2.6.32/programs/pluto/state.c	2014-07-18 19:34:17.834000000 -0400
+@@ -391,58 +391,6 @@
+     struct connection *const c = st->st_connection;
+     struct state *old_cur_state = cur_state == st? NULL : cur_state;
+ 
+-    if(st->st_ikev2)
+-    {
+-    /* child sa*/
+-    if(st->st_clonedfrom != 0) 
+-    {
+-	DBG(DBG_CONTROL, DBG_log("received request to delete child state"));
+-	if(st->st_state == STATE_CHILDSA_DEL) {
+-		DBG(DBG_CONTROL, DBG_log("now deleting the child state"));
+-	}
+-	else
+-	{
+-		/* Only send request if child sa is established
+-		 * otherwise continue with deletion
+-		 */ 
+-		if(IS_CHILD_SA_ESTABLISHED(st)) 
+-		{
+-		DBG(DBG_CONTROL, DBG_log("sending Child SA delete equest"));
+-		//change_state(st, STATE_CHILDSA_DEL);
+-		send_delete(st);
+-		change_state(st, STATE_CHILDSA_DEL);
+-		/* actual deletion when we receive peer response*/
+-		goto delete_state_end;
+-		}
+-	}
+-    }
+-    else 
+-    {
+-	DBG(DBG_CONTROL, DBG_log("received request to delete IKE parent state"));
+-	/* parent sa */
+-	if(st->st_state == STATE_IKESA_DEL)
+-	{
+-		DBG(DBG_CONTROL, DBG_log("now deleting the IKE (or parent) state"));
+-	}
+-	else
+-	{
+-		/* Another check to verify if a secured
+-		 * INFORMATIONAL exchange can be sent or not 
+-		 */
+-		if(st->st_skey_ei.ptr && st->st_skey_ai.ptr 
+-			&& st->st_skey_er.ptr && st->st_skey_ar.ptr)
+-		{
+-		DBG(DBG_CONTROL, DBG_log("sending IKE SA delete request"));
+-		//change_state(st, STATE_IKESA_DEL);
+-		send_delete(st);
+-		change_state(st, STATE_IKESA_DEL);
+-		/* actual deletion when we receive peer response*/
+-                goto delete_state_end;
+-		}
+-	}
+-
+-    }
+-    }
+ 
+     DBG(DBG_CONTROL, DBG_log("deleting state #%lu", st->st_serialno));
+ 
+@@ -460,9 +408,25 @@
+     }
+ 
+     /* tell the other side of any IPSEC SAs that are going down */
+-    if (IS_IPSEC_SA_ESTABLISHED(st->st_state)
+-    || IS_ISAKMP_SA_ESTABLISHED(st->st_state))
+-	send_delete(st);
++    if (IS_IPSEC_SA_ESTABLISHED(st->st_state) ||
++        IS_ISAKMP_SA_ESTABLISHED(st->st_state)) {
++
++               if (IS_CHILD_SA(st)) {
++                       /* child SA */
++                       struct state *pst = NULL;
++                       pst = state_with_serialno(st->st_clonedfrom);
++                       if ( pst != NULL ) {
++                               send_delete(st);
++                       } else  {
++                               DBG(DBG_CONTROL, DBG_log("IKE SA does not exist for this child SA"));
++                               DBG(DBG_CONTROL, DBG_log("INFORMATIONAL exchange can not be sent, deleting state"));
++                               change_state(st, STATE_CHILDSA_DEL);
++                       }
++               } else  {
++                       send_delete(st);
++               }
++       }
++
+ 
+     delete_event(st);	/* delete any pending timer event */
+ 
+@@ -625,6 +589,68 @@
+ 
+ /*
+  * delete all states that were created for a given connection,
++ * additionally delete any states for which func(st, c)
++ * returns true.
++*/
++static void foreach_states_by_connection_func_delete(struct connection *c,
++                                              bool (*comparefunc)(
++                                                      struct state *st,
++                                                      struct connection *c))
++{
++        int pass;
++
++        /* this kludge avoids an n^2 algorithm */
++
++        /* We take two passes so that we delete any ISAKMP SAs last.
++ *          * This allows Delete Notifications to be sent.
++ *                   * ?? We could probably double the performance by caching any
++ *                            * ISAKMP SA states found in the first pass, avoiding a second.
++ *                                     */
++        for (pass = 0; pass != 2; pass++) {
++                int i;
++
++                /* For each hash chain... */
++                for (i = 0; i < STATE_TABLE_SIZE; i++) {
++                        struct state *st;
++
++                        /* For each state in the hash chain... */
++                        for (st = statetable[i]; st != NULL; ) {
++                                struct state *this = st;
++
++                                st = st->st_hashchain_next; /* before this is deleted */
++
++                                /* on pass 2, ignore phase2 states */
++                                if (pass == 1 &&
++                                    IS_ISAKMP_SA_ESTABLISHED(this->st_state))
++                                        continue;
++
++                                /* call comparison function */
++                                if ((*comparefunc)(this, c)) {
++                                        struct state *old_cur_state =
++                                                cur_state == this ?
++                                                  NULL : cur_state;
++                                        lset_t old_cur_debugging =
++                                                cur_debugging;
++
++                                        set_cur_state(this);
++
++                                        openswan_log("deleting state (%s)",
++                                                      enum_show(&state_names, this->st_state));
++
++                                        if (this->st_event != NULL)
++                                                delete_event(this);
++                                        delete_state(this);
++                                        cur_state = old_cur_state;
++                                        set_debugging(old_cur_debugging);
++                                }
++                        }
++                }
++        }
++}
++
++#if 0
++/*
++ * delete all states that were created for a given connection,
+  * additionally delete any states for which func(st, arg)
+  * returns true.
+  */
+@@ -698,18 +724,16 @@
+     }
+     delete_state(this);
+ }
+-
++#endif
+ /*
+  * delete all states that were created for a given connection.
+  * if relations == TRUE, then also delete states that share
+  * the same phase 1 SA.
+  */
+ static bool same_phase1_sa_relations(struct state *this
+-				     , struct connection *c, void *arg
+-				     , int pass UNUSED)
++				     , struct connection *c)
+ {
+-    so_serial_t *pparent_sa = (so_serial_t *)arg;
+-    so_serial_t parent_sa = *pparent_sa;
++	so_serial_t parent_sa = c->newest_isakmp_sa;
+ 
+     return (this->st_connection == c
+ 	    || (parent_sa != SOS_NOBODY 
+@@ -746,9 +770,7 @@
+  * the same phase 1 SA.
+  */
+ static bool same_phase1_sa(struct state *this,
+-			   struct connection *c
+-			   , void *arg UNUSED
+-			   , int pass UNUSED)
++			   struct connection *c)
+ {
+     return (this->st_connection == c);
+ }
+@@ -756,7 +778,6 @@
+ void
+ delete_states_by_connection(struct connection *c, bool relations)
+ {
+-    so_serial_t parent_sa = c->newest_isakmp_sa;
+     enum connection_kind ck = c->kind;
+     struct spd_route *sr;
+ 
+@@ -765,15 +786,8 @@
+     if (ck == CK_INSTANCE)
+ 	c->kind = CK_GOING_AWAY;
+ 
+-    if(relations) {
+-	foreach_states_by_connection_func(c, same_phase1_sa_relations
+-					  , delete_state_function
+-					  , &parent_sa);
+-    } else {
+-	foreach_states_by_connection_func(c, same_phase1_sa
+-					  , delete_state_function
+-					  , &parent_sa);
+-    }
++    foreach_states_by_connection_func_delete(c,
++	relations ? same_phase1_sa_relations : same_phase1_sa);
+ 
+     /*
+      * Seems to dump here because 1 of the states is NULL.  Removing the Assert
+@@ -808,23 +822,18 @@
+  * but it only deletes phase 2 states.
+  */
+ static bool same_phase1_no_phase2(struct state *this
+-				  , struct connection *c
+-				  , void *arg
+-				  , int pass)
+-{
+-    if(pass == 2) return FALSE;
+-
+-    if(IS_ISAKMP_SA_ESTABLISHED(this->st_state)) {
+-	return FALSE;
+-    } else {
+-	return same_phase1_sa_relations(this, c, arg, pass);
+-    }
++				  , struct connection *c)
++{
++        if (IS_ISAKMP_SA_ESTABLISHED(this->st_state))
++                return FALSE;
++        else
++                return same_phase1_sa_relations(this, c);
++
+ }
+ 
+ void
+ delete_p2states_by_connection(struct connection *c)
+ {
+-    so_serial_t parent_sa = c->newest_isakmp_sa;
+     enum connection_kind ck = c->kind;
+ 
+     /* save this connection's isakmp SA,
+@@ -832,9 +841,8 @@
+     if (ck == CK_INSTANCE)
+ 	c->kind = CK_GOING_AWAY;
+ 
+-    foreach_states_by_connection_func(c, same_phase1_no_phase2
+-				      , delete_state_function
+-				      , &parent_sa);
++    foreach_states_by_connection_func_delete(c, same_phase1_no_phase2);
++
+     if (ck == CK_INSTANCE)
+     {
+ 	c->kind = ck;
+@@ -842,6 +850,7 @@
+     }
+ }
+ 
++#if 0
+ /*
+  * rekey_p2states_by_connection - rekeys all the phase 2 of conn
+  *
+@@ -888,6 +897,7 @@
+ 	delete_connection(c, TRUE);
+     }
+ }
++#endif
+ 
+ 
+ /*
+diff -Naur openswan-2.6.32-orig/programs/pluto/state.h openswan-2.6.32/programs/pluto/state.h
+--- openswan-2.6.32-orig/programs/pluto/state.h	2014-07-18 19:32:51.629000000 -0400
++++ openswan-2.6.32/programs/pluto/state.h	2014-07-18 19:33:28.136000000 -0400
+@@ -515,6 +515,8 @@
+ #define change_state(st, new_state) do { (st)->st_state=(new_state); } while(0)
+ #endif
+ 
++extern void release_fragments(struct state *st);
++
+ #endif /* _STATE_H */
+ 
+ /*
+diff -Naur openswan-2.6.32-orig/programs/pluto/timer.c openswan-2.6.32/programs/pluto/timer.c
+--- openswan-2.6.32-orig/programs/pluto/timer.c	2014-07-18 19:32:51.582000000 -0400
++++ openswan-2.6.32/programs/pluto/timer.c	2014-07-18 19:33:28.136000000 -0400
+@@ -52,6 +52,8 @@
+ #include "dpd.h"
+ #include "oswtime.h"
+ 
++#include "ikev2.h"
++
+ #ifdef NAT_TRAVERSAL
+ #include "nat_traversal.h"
+ #endif
+@@ -284,7 +286,7 @@
+     try++;
+     
+     DBG(DBG_CONTROL, 
+-	DBG_log("handling event EVENT_RETRANSMIT for %s \"%s\" #%lu"
++	DBG_log("handling event EVENT_v2_RETRANSMIT for %s \"%s\" #%lu"
+ 	    , ip_str(&c->spd.that.host_addr), c->name, st->st_serialno));
+     
+     if (st->st_retransmit < maximum_retransmissions)
+@@ -527,8 +529,8 @@
+ 
+ 		passert(st != NULL);
+ 		c = st->st_connection;
+-		newest = (IS_PHASE1(st->st_state) || IS_PHASE15(st->st_state ))
+-		    ? c->newest_isakmp_sa : c->newest_ipsec_sa;
++		newest = IS_IKE_SA(st) ?
++		    c->newest_isakmp_sa : c->newest_ipsec_sa;
+ 
+ 		if (newest > st->st_serialno
+ 		&& newest != SOS_NOBODY)
+@@ -536,7 +538,7 @@
+ 		    /* not very interesting: no need to replace */
+ 		    DBG(DBG_LIFECYCLE
+ 			, openswan_log("not replacing stale %s SA: #%lu will do"
+-			    , (IS_PHASE1(st->st_state) || IS_PHASE15(st->st_state ))? "ISAKMP" : "IPsec"
++			    , IS_IKE_SA(st) ? "ISAKMP" : "IPsec"
+ 			    , newest));
+ 		}
+ 		else if (type == EVENT_SA_REPLACE_IF_USED
+@@ -561,17 +563,19 @@
+ 		     */
+ 		    DBG(DBG_LIFECYCLE
+ 			, openswan_log("not replacing stale %s SA: inactive for %lus"
+-			    , (IS_PHASE1(st->st_state) || IS_PHASE15(st->st_state ))? "ISAKMP" : "IPsec"
++			    , IS_IKE_SA(st) ? "ISAKMP" : "IPsec"
+ 			    , (unsigned long)(tm - st->st_outbound_time)));
+ 		}
+ 		else
+ 		{
+ 		    DBG(DBG_LIFECYCLE
+ 			, openswan_log("replacing stale %s SA"
+-			    , (IS_PHASE1(st->st_state)|| IS_PHASE15(st->st_state ))? "ISAKMP" : "IPsec"));
++			    , IS_IKE_SA(st) ? "ISAKMP" : "IPsec"));
+ 		    ipsecdoi_replace(st, LEMPTY, LEMPTY, 1);
+ 		}
+ 		delete_dpd_event(st);
++		
++	
+ 		event_schedule(EVENT_SA_EXPIRE, st->st_margin, st);
+ 	    }
+ 	    break;
+@@ -585,7 +589,7 @@
+ 		passert(st != NULL);
+ 		c = st->st_connection;
+ 
+-		if (IS_PHASE1(st->st_state)|| IS_PHASE15(st->st_state ))
++		if (IS_IKE_SA(st)) 
+ 		{
+ 		    satype = "ISAKMP";
+ 		    latest = c->newest_isakmp_sa;
+@@ -621,7 +625,10 @@
+ 		set_suspended(st, NULL);
+ 	    }
+ #endif
+-	    delete_state(st);
++	    if(st->st_ikev2 && IS_IKE_SA(st)) /* IKEv2 parent, delete children to */
++		v2_delete_my_family(st,INITIATOR);
++	    else
++		delete_state(st);
+ 	    break;
+ 
+         case EVENT_DPD:

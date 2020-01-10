@@ -1,0 +1,106 @@
+diff -Naur openswan-2.6.32-orig/programs/pluto/ikev2.c openswan-2.6.32/programs/pluto/ikev2.c
+--- openswan-2.6.32-orig/programs/pluto/ikev2.c	2014-08-14 13:02:10.487659163 -0400
++++ openswan-2.6.32/programs/pluto/ikev2.c	2014-08-14 13:55:16.599936308 -0400
+@@ -399,7 +399,13 @@
+ 
+     md->msgid_received = ntohl(md->hdr.isa_msgid);
+ 
++    if (md->hdr.isa_flags & ISAKMP_FLAGS_R) {
++	DBG(DBG_CONTROL, DBG_log("I am receiving an IKE Response"));
++    } else {
++	DBG(DBG_CONTROL, DBG_log("I am receiving an IKE Request"));
++    }
+     if(md->hdr.isa_flags & ISAKMP_FLAGS_I) {
++	DBG(DBG_CONTROL, DBG_log("I am the IKE SA Original Responder"));
+ 	/* then I am the responder */
+ 
+ 	md->role = RESPONDER;
+@@ -415,7 +421,8 @@
+ 	}
+ 
+ 	if(st != NULL) {
+-		if(st->st_msgid_last_remotereq > md->msgid_received) {
++		if (st->st_msgid_last_remotereq != INVALID_MSGID &&
++		    st->st_msgid_last_remotereq > md->msgid_received) {
+ 			/* this is an OLD retransmit. we can't do anything */
+ 			openswan_log("received too old retransmit, ignoring: %u < %u"
+ 			     , md->msgid_received, st->st_msgid_last_remotereq);
+@@ -430,6 +437,7 @@
+ 	    /* update lastrecv later on */
+     } else {
+         /* then I am the initiator, and this may be a reply or request */
++	DBG(DBG_CONTROL, DBG_log("I am the IKE SA Original Initiator"));
+ 	
+ 	md->role = INITIATOR;
+ 
+@@ -466,7 +474,10 @@
+ 	}
+ 
+ 	if(st != NULL) {
+-		if (st->st_msgid_last_localreq != INVALID_MSGID &&  md->msgid_received <=  st->st_msgid_last_localreq) {
++
++		if (st->st_msgid_last_localreq != INVALID_MSGID && 
++		    st->st_msgid_last_remotereq != INVALID_MSGID && 
++			md->msgid_received <=  st->st_msgid_last_localreq) {
+ 			/* this is an OLD retransmit. we can't do anything */
+ 			DBG(DBG_CONTROL,
+ 				DBG_log("responding peer retransmitted msgid %u",
+@@ -502,10 +513,8 @@
+ 	DBG(DBG_CONTROL, DBG_log("ended up with STATE_IKEv2_ROOF"));
+ 
+ 	/* no useful state */
+-	if(md->hdr.isa_flags & ISAKMP_FLAGS_I) {
++	if (!(md->hdr.isa_flags & ISAKMP_FLAGS_R)) {
+ 	    /* must be an initiator message, so we are the responder */
+-
+-	    /* XXX need to be more specific */
+ 	    SEND_NOTIFICATION(INVALID_MESSAGE_ID);
+ 	}
+ 	return;
+@@ -701,16 +710,13 @@
+ 	if(pst == NULL) pst = st;
+     }
+     
+-
+-	switch(md->role) {
+-	case INITIATOR:
++	if (md->hdr.isa_flags & ISAKMP_FLAGS_R) {
+ 		pst->st_msgid_last_localreq =  md->msgid_received;
+ 		if (pst->st_msgid_last_localreq <= pst->st_msgid_last_localreq_ack)
+ 			pst->st_msgid_last_localreq_ack = pst->st_msgid_last_localreq +1;
+-		break;
+-	case RESPONDER:
+-		pst->st_msgid_last_remotereq = md->msgid_received;
+-		pst->st_msgid_last_localreq_ack = md->msgid_received + 1;
++	} else {
++		if (md->msgid_received > pst->st_msgid_last_remotereq)
++			pst->st_msgid_last_remotereq = md->msgid_received;
+ 	}
+ }
+ 
+@@ -1032,11 +1038,10 @@
+ 		  , from_state_name
+ 		  , enum_name(&ipsec_notification_names, md->note));
+ 
+-#if 0
+-	if(md->note > 0) {
+-	    SEND_NOTIFICATION(md->note);
++	if(md->note != NOTHING_WRONG) {
++	    if (!(md->hdr.isa_flags & ISAKMP_FLAGS_R))
++		SEND_NOTIFICATION(md->note);
+ 	}
+-#endif
+ 	
+ 	DBG(DBG_CONTROL,
+ 	    DBG_log("state transition function for %s failed: %s"
+diff -Naur openswan-2.6.32-orig/programs/pluto/ikev2_parent.c openswan-2.6.32/programs/pluto/ikev2_parent.c
+--- openswan-2.6.32-orig/programs/pluto/ikev2_parent.c	2014-08-14 13:02:10.506659670 -0400
++++ openswan-2.6.32/programs/pluto/ikev2_parent.c	2014-08-14 13:57:38.823605079 -0400
+@@ -120,6 +120,7 @@
+     st->st_ikev2 = TRUE;
+     change_state(st, STATE_PARENT_I1);
+     st->st_msgid_last_localreq = INVALID_MSGID;
++    st->st_msgid_last_remotereq = INVALID_MSGID;
+     st->st_msgid_last_localreq_ack = 0;
+     st->st_try   = try;
+ 

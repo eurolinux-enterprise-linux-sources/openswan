@@ -1,0 +1,138 @@
+diff -Naur openswan-2.6.32-orig/include/id.h openswan-2.6.32/include/id.h
+--- openswan-2.6.32-orig/include/id.h	2014-06-20 13:52:49.291218547 -0400
++++ openswan-2.6.32/include/id.h	2014-06-20 13:53:43.286487015 -0400
+@@ -60,6 +60,7 @@
+ extern bool same_id(const struct id *a, const struct id *b);
+ #define MAX_WILDCARDS	15
+ extern bool match_id(const struct id *a, const struct id *b, int *wildcards);
++extern int id_kind(const struct id *id);
+ extern int id_count_wildcards(const struct id *id);
+ #define id_is_ipaddr(id) ((id)->kind == ID_IPV4_ADDR || (id)->kind == ID_IPV6_ADDR)
+ 
+@@ -74,6 +75,7 @@
+  * callers may use it.
+  */
+ extern const char *pluto_ip_str(const ip_address *src);
++extern void duplicate_id(struct id *dst, struct id *src);
+ 
+ #endif /* _ID_H */
+ 
+diff -Naur openswan-2.6.32-orig/lib/libopenswan/id.c openswan-2.6.32/lib/libopenswan/id.c
+--- openswan-2.6.32-orig/lib/libopenswan/id.c	2014-06-20 13:52:49.293218594 -0400
++++ openswan-2.6.32/lib/libopenswan/id.c	2014-06-20 13:56:15.326976049 -0400
+@@ -404,6 +404,11 @@
+     return FALSE;
+ }
+ 
++int id_kind(const struct id *id)
++{
++	return id->kind;
++}
++
+ /* compare two struct id values */
+ bool
+ same_id(const struct id *a, const struct id *b)
+@@ -550,6 +555,13 @@
+     return buf;
+ }
+ 
++void duplicate_id(struct id *dst, struct id *src)
++{
++	dst->kind =  src->kind;
++	dst->ip_addr = src->ip_addr;
++	clonetochunk(dst->name, src->name.ptr, src->name.len, "copy of id");
++}
++
+ /*
+  * Local Variables:
+  * c-basic-offset:4
+diff -Naur openswan-2.6.32-orig/programs/pluto/connections.c openswan-2.6.32/programs/pluto/connections.c
+--- openswan-2.6.32-orig/programs/pluto/connections.c	2014-06-20 13:52:49.302218806 -0400
++++ openswan-2.6.32/programs/pluto/connections.c	2014-06-20 14:07:01.236775829 -0400
+@@ -2448,7 +2448,7 @@
+  */
+ struct connection *
+ refine_host_connection(const struct state *st, const struct id *peer_id
+-, bool initiator, bool aggrmode)
++, bool initiator, bool aggrmode, bool *fromcert)
+ {
+     struct connection *c = st->st_connection;
+     u_int16_t auth = st->st_oakley.auth;
+@@ -2559,8 +2559,10 @@
+ 	    if (d->policy & POLICY_GROUP)
+ 		continue;
+ 
+-	    /* check if peer_id matches, exactly or after instantiation */
+-	    if (!match)
++	    /* check if peer_id matches, exactly or after instantiation  */
++	    /* check for the match but also check to see if it's the
++	     * %fromcert + peer id match result. - matt */
++	    if (!match && !(*fromcert = id_kind(&d->spd.that.id) == ID_FROMCERT))
+ 		continue;
+ 
+ 	    /* if initiator, our ID must match exactly */
+diff -Naur openswan-2.6.32-orig/programs/pluto/connections.h openswan-2.6.32/programs/pluto/connections.h
+--- openswan-2.6.32-orig/programs/pluto/connections.h	2014-06-20 13:52:49.224216973 -0400
++++ openswan-2.6.32/programs/pluto/connections.h	2014-06-20 13:53:43.294487203 -0400
+@@ -358,7 +358,7 @@
+ 		       , const ip_address *me, u_int16_t my_port
+ 	, const ip_address *him, u_int16_t his_port, lset_t policy),
+     *refine_host_connection(const struct state *st, const struct id *id
+-	, bool initiator, bool aggrmode),
++	, bool initiator, bool aggrmode, bool *fromcert),
+     *find_client_connection(struct connection *c
+ 			    , const ip_subnet *our_net
+ 			    , const ip_subnet *peer_net
+diff -Naur openswan-2.6.32-orig/programs/pluto/ipsec_doi.c openswan-2.6.32/programs/pluto/ipsec_doi.c
+--- openswan-2.6.32-orig/programs/pluto/ipsec_doi.c	2014-06-20 13:52:48.539200882 -0400
++++ openswan-2.6.32/programs/pluto/ipsec_doi.c	2014-06-20 14:08:44.763171895 -0400
+@@ -650,7 +650,8 @@
+      */
+     if (initiator)
+     {
+-	if (!same_id(&st->st_connection->spd.that.id, &peer))
++	if (!same_id(&st->st_connection->spd.that.id, &peer) &&
++	     id_kind(&st->st_connection->spd.that.id) != ID_FROMCERT)
+ 	{
+ 	    char expect[IDTOA_BUF]
+ 		, found[IDTOA_BUF];
+@@ -662,16 +663,24 @@
+ 		, expect, found);
+ 	    return FALSE;
+ 	}
++	else if (id_kind(&st->st_connection->spd.that.id) == ID_FROMCERT) 
++	{
++	    if (id_kind(&peer) != ID_DER_ASN1_DN) {
++		loglog(RC_LOG_SERIOUS, "peer ID is not a certificate type");
++		return FALSE;
++	    }
++	    duplicate_id(&st->st_connection->spd.that.id, &peer);
++	}
+     }
+     else
+     {
+ 	struct connection *c = st->st_connection;
+ 	struct connection *r;
+-
++	bool fc = 0;
+ 	/* check for certificate requests */
+ 	decode_cr(md, &c->requested_ca);
+ 
+-	r = refine_host_connection(st, &peer, initiator, aggrmode);
++	r = refine_host_connection(st, &peer, initiator, aggrmode, &fc);
+ 
+ 	/* delete the collected certificate requests */
+ 	free_generalNames(c->requested_ca, TRUE);
+@@ -719,6 +728,12 @@
+ 	    c->spd.that.has_id_wildcards = FALSE;
+ 	    unshare_id_content(&c->spd.that.id);
+ 	}
++	else if (fc)
++	{
++	    DBG(DBG_CONTROL, DBG_log("copying ID for fromcert"));
++	    duplicate_id(&r->spd.that.id, &peer);
++	}
++
+     }
+ 
+     return TRUE;

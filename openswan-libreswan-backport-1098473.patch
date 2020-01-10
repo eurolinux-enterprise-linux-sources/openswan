@@ -1,0 +1,245 @@
+diff -Naur openswan-2.6.32-orig/programs/newhostkey/newhostkey.in openswan-2.6.32/programs/newhostkey/newhostkey.in
+--- openswan-2.6.32-orig/programs/newhostkey/newhostkey.in	2010-12-17 20:23:54.000000000 -0500
++++ openswan-2.6.32/programs/newhostkey/newhostkey.in	2014-07-30 16:34:58.862377515 -0400
+@@ -1,6 +1,10 @@
+ #! /bin/sh
++#
+ # generate new key for this host
++#
+ # Copyright (C) 2001, 2002  Henry Spencer.
++# Copyright (C) 2014 Paul Wouters <pwouters@redhat.com>
++# Copyright (C) 2014 Tuomo Soini <tis@foobar.fi>
+ # 
+ # This program is free software; you can redistribute it and/or modify it
+ # under the terms of the GNU General Public License as published by the
+@@ -14,62 +18,110 @@
+ #
+ 
+ me="ipsec newhostkey"
+-usage="Usage: $me --output filename [--random device] [--bits n] [--quiet] [--hostname host] [--configdir nssdbdir] [--password password] 
+-         or
+-       $me --output - [--random device] [--bits n] [--quiet] [--verbose] [--hostname host]  [--configdir nssdbdir] [--password password] >filename"
++usage="Usage: $me [--output filename] [--random device] [--bits n] \\
++    [--quiet] [--hostname host] [--configdir nssdbdir] [--password password] "
+ 
+-bits=2192
++bits=
+ verbose=
+ host=
+ random="--random /dev/random"
+-output=
+-configdir=
++output="@FINALCONFDIR@/ipsec.secrets"
++configdir="@IPSEC_CONFDDIR@"
+ password=
+-for dummy
+-do
+-	case "$1" in
+-	--bits)	bits="$2" ; shift	;;
+-	--quiet)	verbose=	;;
+-	--hostname)	host="--hostname $2" ; shift	;;
+-	--output)	output="$2" ; shift		;;
+-	--verbose)	verbose=--verbose 	;;
+-	--version)	echo "$me $IPSEC_VERSION" ; exit 0	;;
+-	--random)	random="--random $2" ; shift	;;
+-    --configdir)    configdir="--configdir $2" ;    shift   ;;
+-    --password)     password="--password $2" ;      shift   ;;
+-	--help)	echo "$usage" ; exit 0	;;
+-	--)	shift ; break		;;
+-	-*)	echo "$me: unknown option \`$1'" >&2 ; exit 2	;;
+-	*)	break			;;
+-	esac
+-	shift
++for dummy; do
++    case "$1" in
++	--bits)
++	    bits="${2}"
++	    shift
++	    ;;
++	--quiet)
++	    verbose=
++	    ;;
++	--hostname)
++	    host="--hostname ${2}"
++	    shift
++	    ;;
++	--output)
++	    output="${2}"
++	    shift
++	    ;;
++	--verbose)
++	    verbose="--verbose"
++ 	    ;;
++	--version)
++	    echo "$me $IPSEC_VERSION"
++	    exit 0
++	    ;;
++	--random)
++	    random="--random ${2}"
++	    shift
++	    ;;
++	--configdir)
++	    configdir="${2}"
++	    shift
++	    ;;
++	--password)
++	    password="--password ${2}"
++	    shift
++	    ;;
++	--help)
++	    echo "$usage"
++	    exit 0
++	    ;;
++	--)
++	    shift
++	    break
++	    ;;
++	-*)
++	    echo "$me: unknown option \`$1'" >&2
++	    exit 2
++	    ;;
++	*)
++	    break
++	    ;;
++    esac
++    shift
+ done
+ 
+-if test " $output" = " " && test ! -f ${IPSEC_CONFS}/ipsec.secrets
+-then
+-    output=${IPSEC_CONFS}/ipsec.secrets
++if [ -d "${output}" ]; then
++    echo "ERROR: output file should be a secrets file, not a directory"
++    exit 255
++fi
++
++if [ -s "${output}" ]; then
++    echo "${0}: WARNING: file \"${output}\" exists, appending to it" >&2
++fi
++
++if [ ! -d ${configdir} ]; then
++    echo "No such directory: ${configdir}"
++    exit 255
+ fi
+ 
+-if test " $output" = " "
+-then
+-	echo "$0: no --output specification included" >&2
+-	exit 1
+-elif test " $verbose" != " " -a " $output" != " -" -a -s "$output"
+-then
+-	echo "$0: WARNING: file \`$output' exists, appending to it" >&2
++certutil -L -d $configdir >/dev/null 2>/dev/null
++RETVAL=$?
++if [ ${RETVAL} -eq 255 ]; then
++    echo "NSS database in $configdir not initialized."
++    echo "    Please run 'ipsec initnss --configdir $configdir'"
++    exit 255
+ fi
+ 
+-(
++key=$(ipsec rsasigkey ${verbose} ${random} --configdir ${configdir} ${password} ${host} ${bits})
++RETVAL=$?
++if [ ${RETVAL} -eq 0 ]; then
++    umask 077
++    TEMPFILE=$(/bin/mktemp ${output}.XXXXXXX)
++    (
+ 	echo ': RSA	{'
+-	ipsec rsasigkey $verbose $random $configdir $password $host $bits 
++	echo "${key}"
+ 	echo '	}'
+ 	echo '# do not change the indenting of that "}"'
+-) |
+-if test " $output" = " -"
+-then
+-	cat
++    ) > ${TEMPFILE}
++    if [ -s "${output}" ]; then
++	cat ${TEMPFILE} >> ${output}
++	rm ${TEMPFILE}
++    else
++	mv ${TEMPFILE} ${output}
++    fi
+ else
+-	umask 077
+-	cat >>$output.new
+-	mv $output.new $output
++    exit ${RETVAL}
+ fi
+diff -Naur openswan-2.6.32-orig/programs/rsasigkey/rsasigkey.c openswan-2.6.32/programs/rsasigkey/rsasigkey.c
+--- openswan-2.6.32-orig/programs/rsasigkey/rsasigkey.c	2014-07-30 16:11:22.902744732 -0400
++++ openswan-2.6.32/programs/rsasigkey/rsasigkey.c	2014-07-30 17:40:18.596552392 -0400
+@@ -57,6 +57,12 @@
+ # endif
+ #endif
+ 
++/*
++ * We allow 2192 as a minimum, but default to a random value between 3072 and
++ * 4096. The range is used to avoid a mono-culture of key sizes.
++ */
++#define MIN_KEYBIT 2192
++
+ #ifndef DEVICE
+ /* To the openwrt people: Do not change /dev/random to /dev/urandom. The
+  * /dev/random device is ONLY used for generating long term keys, which
+@@ -315,10 +321,11 @@
+ 	int errflg = 0;
+ 	int i;
+ 	int nbits;
+-	char *oldkeyfile = NULL;
+ #ifdef HAVE_LIBNSS
+ 	char *configdir = NULL; /* where the NSS databases reside */
+ 	char *password = NULL;  /* password for token authentication */
++#else
++	char *oldkeyfile = NULL;
+ #endif
+ 
+ 	while ((opt = getopt_long(argc, argv, "", opts, NULL)) != EOF)
+@@ -336,9 +343,11 @@
+ 				exit(2);
+ 			}
+ 			break;
++#ifndef HAVE_LIBNSS
+ 		case 'o':	/* reformat old key */
+ 			oldkeyfile = optarg;
+ 			break;
++#endif
+ 		case 'H':	/* set hostname for output */
+ 			strcpy(outputhostname, optarg);
+ 			break;
+@@ -371,7 +380,7 @@
+ 			break;
+ 		}
+ #ifdef HAVE_LIBNSS
+-	if (errflg || optind != argc-1) {
++	if (errflg) {
+ 		printf("Usage:\t%s\n", usage);
+ 		exit(2);
+ 	}
+@@ -394,14 +403,24 @@
+ 		}
+ 	}
+ 
++#ifndef HAVE_LIBNSS
+ 	if (oldkeyfile == NULL) {
+ 		assert(argv[optind] != NULL);
+ 		nbits = atoi(argv[optind]);
+ 	} else
+ 		nbits = getoldkey(oldkeyfile);
++#endif
++
++	if (argv[optind] == NULL) {
++		/* default: spread bits between 3072 - 4096 in multiple's of 16 */
++		nbits = 3072 + 16 * (rand() % 64);
++	} else {
++		nbits = atoi(argv[optind]);
++	}
+ 
+-	if (nbits <= 0) {
+-		fprintf(stderr, "%s: invalid bit count (%d)\n", me, nbits);
++	if (nbits < MIN_KEYBIT) {
++		fprintf(stderr, "%s: requested RSA key size of %d is too small - use %d or more\n",
++			me, nbits, MIN_KEYBIT);
+ 		exit(1);
+ 	} else if (nbits > MAXBITS) {
+ 		fprintf(stderr, "%s: overlarge bit count (max %d)\n", me,

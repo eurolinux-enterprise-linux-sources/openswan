@@ -1,0 +1,148 @@
+diff -Naur openswan-2.6.32-orig/programs/_confread/d.ipsec.conf/ike.xml openswan-2.6.32/programs/_confread/d.ipsec.conf/ike.xml
+--- openswan-2.6.32-orig/programs/_confread/d.ipsec.conf/ike.xml	2010-12-17 20:23:54.000000000 -0500
++++ openswan-2.6.32/programs/_confread/d.ipsec.conf/ike.xml	2014-06-21 13:59:21.599387432 -0400
+@@ -1,37 +1,49 @@
+   <varlistentry>
+   <term><emphasis remap='B'>ike</emphasis></term>
+   <listitem>
+-<para>IKE encryption/authentication algorithm to be used
++<para>
++IKE encryption/authentication algorithm to be used
+ for the connection (phase 1 aka ISAKMP SA).  The format is
+ <emphasis remap='I'>"cipher-hash;modpgroup, cipher-hash;modpgroup, ..."</emphasis>
+ Any left out option will be filled in with all allowed default
+-options. Multiple proposals are separated by a comma. If an
+-<emphasis remap='B'>ike=</emphasis>
+-line is specified, no other received proposals will be accepted.
++options. Multiple proposals are separated by a comma. If a modp group is specified,
++the encryption and authentication algorithms must be specified as well. If an
++authentication algorithm is specified, an encryption algorithm must be specified
++as well.
++</para>
++<para> If an
++<emphasis remap='B'>ike=</emphasis> line is specified, no other received proposals will be accepted.
+ Formerly there was a distinction (by using a <emphasis remap='B'>"!"</emphasis> symbol) between
+ "strict mode" or not. That mode has been obsoleted. If an <emphasis remap='B'>ike=</emphasis> option is
+ specified, the mode is always strict, meaning no other received proposals will be accepted.
++</para>
++<para>
+ Some examples are
+ <emphasis remap='B'>ike=3des-sha1,aes-sha1</emphasis>,
+ <emphasis remap='B'>ike=aes</emphasis>,
++<emphasis remap='B'>ike=aes128,aes256</emphasis>,
+ <emphasis remap='B'>ike=aes128-md5;modp2048</emphasis>,
+ <emphasis remap='B'>ike=aes128-sha1;dh22</emphasis>,
+-<emphasis remap='B'>ike=3des-md5;modp1024,aes-sha1;modp1536</emphasis> or
+-<emphasis remap='B'>ike=modp1536</emphasis>.
+-The options must be suitable as a value of
+-<citerefentry><refentrytitle>ipsec_spi</refentrytitle><manvolnum>8</manvolnum></citerefentry>'s
+-<option>--ike</option> option. The default is to use IKE, and to allow all combinations of:
++<emphasis remap='B'>ike=3des-md5;modp1024,aes-sha1;modp1536</emphasis>. Note that aes without a
++key size refers to aes128, not aes256.
++</para>
++<para>
++The default is to use IKE, and to allow all combinations of:
+ <literallayout remap='.nf'><emphasis remap='B'>
+-                cipher:                 3des or aes
++                cipher:                 3des or aes128
+                 hash:                   sha1 or md5
+                 pfsgroup (DHgroup):     modp1024 or modp1536
+ </emphasis></literallayout></para>
+ <para>
+-If Openswan was compiled with extra INSECURE and BROKEN options, then the des (1des) and null cipher, as
+-well as modp768 are available. This turns your VPN into a joke. Do not enable these options.</para>
+-<para>If openswan was compiled with USE_MODP_RFC5114 support, then Diffie-Hellman
+-groups 22, 23 and 24 are also implemented as per RFC-5114. Instead of the modp
+-key syntax, use the "dh" keyword, for example <emphasis>ike=3des-sha1;dh23</emphasis>
++If Openswan was compiled with extra INSECURE and BROKEN options, then
++the des (1des) and null cipher, as well as modp768 are available. This
++turns your VPN into a joke. Do not enable these options.
++</para>
++<para>
++If openswan was compiled with USE_MODP_RFC5114 support, then
++Diffie-Hellman groups 22, 23 and 24 are also implemented as per
++RFC-5114. Instead of the modp key syntax, use the "dh" keyword, for
++example <emphasis>ike=3des-sha1;dh23</emphasis>
+ </para>
+   </listitem>
+   </varlistentry>
+diff -Naur openswan-2.6.32-orig/programs/_confread/d.ipsec.conf/phase2alg.xml openswan-2.6.32/programs/_confread/d.ipsec.conf/phase2alg.xml
+--- openswan-2.6.32-orig/programs/_confread/d.ipsec.conf/phase2alg.xml	2010-12-17 20:23:54.000000000 -0500
++++ openswan-2.6.32/programs/_confread/d.ipsec.conf/phase2alg.xml	2014-06-21 13:52:26.290059755 -0400
+@@ -1,22 +1,63 @@
+   <varlistentry>
+   <term><emphasis remap='B'>phase2alg</emphasis></term>
+   <listitem>
+-<para> Specifies the algorithms that will be offered/accepted for a phase2
+-negotiation. If not specified, a secure set of defaults will be used. Sets
+-are separated using comma's.
+-</para>
+-<para>The default values are the same as for ike=
+-Note also that not all ciphers available to the kernel (eg through CryptoAPI)
+-are necessarilly supported here.</para>
+-<para> The format for ESP is ENC-AUTH followed by an optional PFSgroup. For
+-instance, "3des-md5" or "aes256-sha1;modp2048" or  "aes-sha1,aes-md5".
++<para>
++Specifies the algorithms that will be offered/accepted for a phase2
++negotiation. If not specified, a secure set of defaults will be used which includes
++AES and 3DES for encryption, SHA1 and MD5 for authentication, and MODP1024 and MODP1536
++for DiffieHellman/MODP. If specifying multiple sets, the order specifies the preference.
+ </para>
+-<para>For RFC-5114 DH groups, use the "dh" keyword, eg "aes256-sha1;dh23"
++<para>
++If a phase2alg= is specified, the specified set becomes the full set
++and it is not augmented with the builtin default set (this is known as
++'strict mode' in older openswan versions).  Sets are separated using
++comma's. If entries in a set do not specify an encryption, authentication
++or modp group, permutations of the default set are used. For example,
++phase2alg=aes allows aes-sha1;modp1024, aes-md5;modp1024, aes-sha1;modp1536
++and aes-md5;modp1536.
+ </para>
+-<para> The format for AH is AUTH followed by an optional PFSgroup. For
+-instance, "md5" or "sha1;modp1536".
++<para>
++The default values are the same as for ike=. If PFS is enabled (pfs=yes), the
++default modp group for ESP will be the same as negotiated for IKE.
++Not all ciphers available to the kernel (eg through CryptoAPI)
++are necessarilly available for ESP.
+ </para>
+-<para>A special case is AES CCM, which uses the syntax of "phase2alg=aes_ccm_a-152-null"</para>
++<para>
++The format for ESP is ENC-AUTH followed by an optional PFSgroup. For
++example, phase2alg=3des-md5 or phase2alg=aes256-sha1;modp2048 or
++phase2alg=aes-sha1,aes-md5.
++</para>
++<para>
++The format for AH is AUTH followed by an optional PFSgroup. For example:
++phase2alg=md5 or phase2alg=sha1;modp1536.
++</para>
++<para>
++Some algorithms allow specifying a key size. For the encryption algorithm,
++the keysize number in bits is appended to the name. for the authentication
++algorithm, the key size is appended using an underline prefix. For
++example: phase2alg=aes256-sha2_256,aes128-sha1. Algorithms with fixed key size
++(such as 3des) should not specify their key size.
++</para><para>
++For RFC-5114 DH groups, use the dh keyword, eg aes256-sha1;dh23. If specifying a modp group,
++an encryption algorithm and authentication algorithm must also be specified.
++</para>
++<para>
++CCM and GCM are combinatory encryption algorithms with builtin
++authentication. When using a CCM/GCM phase2alg, there is no separate
++authentication algorithm used, and "null" is configured for the authentication
++algorithm. Valid key sizes are 128, 192 and 256. An Integrity Check
++Value (ICV) is denoted by a letter, where a = 8, b = 12 and c = 16. CCM
++requires an additional 24 bits of salt which is added to the key size
++value. GCM requires and additional 32 bits of salt which is added to
++the key size calue.
++For example: phase2alg=aes_ccm_a-152-null or phase2alg=aes_gcm_c-160-null
++</para>
++<para>
++Note that libreswan, unlike openswan, does not require adding the salt
++value to the keysize. It also supports aliases without ICV modifier
++(eg aes_ccm and aes_gcm) which refer to the ICV = 16 version.
++</para>
++
+ 
+   </listitem>
+   </varlistentry>

@@ -1,0 +1,12 @@
+diff -Naur openswan-2.6.32-orig/programs/pluto/log.c openswan-2.6.32/programs/pluto/log.c
+--- openswan-2.6.32-orig/programs/pluto/log.c	2014-08-26 21:54:14.872889445 -0400
++++ openswan-2.6.32/programs/pluto/log.c	2014-08-26 22:13:52.321908010 -0400
+@@ -688,7 +688,7 @@
+ 
+ /* log a debugging message (prefixed by "| ") */
+ 
+-int
++__attribute__((optimize (0))) int
+ DBG_log(const char *message, ...)
+ {
+     va_list args;

@@ -1,0 +1,61 @@
+diff -Naur openswan-2.6.32-orig/include/pluto_constants.h openswan-2.6.32/include/pluto_constants.h
+--- openswan-2.6.32-orig/include/pluto_constants.h	2014-09-07 21:51:05.800000000 -0400
++++ openswan-2.6.32/include/pluto_constants.h	2014-09-07 21:56:17.792000000 -0400
+@@ -91,6 +91,7 @@
+     EVENT_v2_RETRANSMIT,   /* Retransmit v2 packet */
+ 
+     EVENT_PENDING_DDNS, /* try to start connections where DNS failed at init */
++    EVENT_v2_RESPONDER_TIMEOUT
+ };
+ 
+ #define EVENT_REINIT_SECRET_DELAY		3600 /* 1 hour */
+diff -Naur openswan-2.6.32-orig/lib/libpluto/pluto_constants.c openswan-2.6.32/lib/libpluto/pluto_constants.c
+--- openswan-2.6.32-orig/lib/libpluto/pluto_constants.c	2014-09-07 21:51:05.648000000 -0400
++++ openswan-2.6.32/lib/libpluto/pluto_constants.c	2014-09-07 21:55:26.371000000 -0400
+@@ -87,7 +87,8 @@
+ 	"EVENT_CRYPTO_FAILED",
+ 	"EVENT_PENDING_PHASE2",
+ 	"EVENT_v2_RETRANSMIT",
+-	"EVENT_PENDING_DDNS"
++	"EVENT_PENDING_DDNS",
++	"EVENT_v2_RESPONDER_TIMEOUT"
+     };
+ 
+ enum_names timer_event_names =
+diff -Naur openswan-2.6.32-orig/programs/pluto/ikev2.c openswan-2.6.32/programs/pluto/ikev2.c
+--- openswan-2.6.32-orig/programs/pluto/ikev2.c	2014-09-07 21:51:05.831000000 -0400
++++ openswan-2.6.32/programs/pluto/ikev2.c	2014-09-07 21:53:29.402000000 -0400
+@@ -170,6 +170,7 @@
+       .req_clear_payloads = P(SA) | P(KE) | P(Ni),
+       .processor  = ikev2parent_inI1outR1,
+       .recv_type  = ISAKMP_v2_SA_INIT,
++      .timeout_event = EVENT_v2_RESPONDER_TIMEOUT,
+     },
+ 
+     { .state      = STATE_PARENT_R1,
+@@ -920,6 +921,14 @@
+ 	    delete_event(st);
+ 	    event_schedule(kind, delay, st);
+ 	    break;
++
++	case EVENT_v2_RESPONDER_TIMEOUT:
++	    delete_event(st);
++	    event_schedule(kind,
++		MAXIMUM_RETRANSMISSIONS_INITIAL *
++		EVENT_RETRANSMIT_DELAY_0,
++		st);
++	    break;
+ 	    
+ 	case EVENT_NULL:
+ 	    /* XXX: Is there really no case where we want to set no timer? */
+diff -Naur openswan-2.6.32-orig/programs/pluto/timer.c openswan-2.6.32/programs/pluto/timer.c
+--- openswan-2.6.32-orig/programs/pluto/timer.c	2014-09-07 21:51:05.806000000 -0400
++++ openswan-2.6.32/programs/pluto/timer.c	2014-09-07 21:57:31.049000000 -0400
+@@ -580,6 +580,7 @@
+ 	    }
+ 	    break;
+ 
++	case EVENT_v2_RESPONDER_TIMEOUT:
+ 	case EVENT_SA_EXPIRE:
+ 	    {
+ 		const char *satype;
