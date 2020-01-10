@@ -11,7 +11,7 @@
 Summary: IPSEC implementation with IKEv1 and IKEv2 keying protocols
 Name: openswan
 Version: 2.6.32
-Release: 27.4%{?dist}
+Release: 27%{?dist}
 
 License: GPLv2+
 Url: http://www.openswan.org/
@@ -81,15 +81,6 @@ Patch56: openswan-libreswan-backport-975550.patch
 Patch57: openswan-libreswan-backport-994240.patch
 Patch58: openswan-libreswan-backport-1002312.patch
 Patch59: openswan-libreswan-backport-fips.patch
-Patch60: openswan-libreswan-backport-CVE-2013-6466.patch
-# 1072922 / 1070356 / 1090273
-Patch61: openswan-2.6.32-20140225-fixup.patch
-# 1090614
-Patch62: openswan-2.6.32-neutron.patch
-# 1089395
-Patch63: openswan-libreswan-backport-1088656.patch
-# 1096640
-Patch64: openswan-1025687.patch
 
 Group: System Environment/Daemons
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
@@ -212,11 +203,6 @@ find doc -name .gitignore -print0 | xargs -0 rm -v
 %patch57 -p1
 %patch58 -p1
 %patch59 -p1
-%patch60 -p1
-%patch61 -p1
-%patch62 -p1
-%patch63 -p1
-%patch64 -p1
 
 %build
 %{__make} \
@@ -356,20 +342,6 @@ fi
 chkconfig --add ipsec || :
 
 %changelog
-* Mon May 12 2014 Paul Wouters <pwouters@redhat.com> - 2.6.32-27.4
-- Resolves: rhbz#1096640 service ipsec stop shows errors about unloading used modules
-
-* Tue Apr 22 2014 Paul Wouters <pwouters@redhat.com> - 2.6.32-27.3
-- Resolves: rhbz#1089395 pluto doesn't bring up sourceip route when peer restarts
-- Resolves: rhbz#1090273 openswan breaks NAT-T draft clients
-- Resolves: rhbz#1090614 pluto cannot write to directories not owned by root
-
-* Thu Feb 06 2014 Paul Wouters <pwouters@redhat.com> - 2.6.32-27.2
-- Resolves: rhbz#1050337 (CVE-2013-6466 refix for delete/notify code)
-
-* Wed Jan 22 2014 Paul Wouters <pwouters@redhat.com> - 2.6.32-27.1
-- Resolves: rhbz#1050337 (CVE-2013-6466)
-
 * Thu Oct 17 2013 Paul Wouters <pwouters@redhat.com> - 2.6.32-27
 - Resolves: rhbz#1020322 openswan cannot start if FIPS misconfigured
 
