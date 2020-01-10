@@ -124,21 +124,21 @@ diff -Naur openswan-2.6.32-orig/programs/pluto/ikev1_main.c openswan-2.6.32/prog
      ISAKMP_SA_established(st->st_connection, st->st_serialno);
  
 diff -Naur openswan-2.6.32-orig/programs/pluto/nat_traversal.c openswan-2.6.32/programs/pluto/nat_traversal.c
---- openswan-2.6.32-orig/programs/pluto/nat_traversal.c	2013-10-10 15:43:20.341174767 -0400
-+++ openswan-2.6.32/programs/pluto/nat_traversal.c	2013-10-10 15:46:30.229629067 -0400
-@@ -784,10 +784,7 @@
- 	unsigned int *_kap_st = (unsigned int *)data;
- 	const struct connection *c = st->st_connection;
- 	if (!c) return;
+--- openswan-2.6.32-orig/programs/pluto/nat_traversal.c	2013-04-27 13:52:44.247270184 -0400
++++ openswan-2.6.32/programs/pluto/nat_traversal.c	2013-04-27 14:03:29.257935790 -0400
+@@ -800,10 +800,7 @@
+ 		DBG(DBG_NATT,DBG_log("Sending of NAT-T KEEP-ALIVE forced by global configuration (force_keepalive=yes)"));
+ 	}
+ 
 -	if ( ((st->st_state == STATE_MAIN_R3)
 -	      || (st->st_state == STATE_MAIN_I4)
 -	      || (st->st_state == STATE_AGGR_R2)
 -	      || (st->st_state == STATE_AGGR_I2))
-+	if ( IS_ISAKMP_SA_ESTABLISHED(st->st_state)
++	 if ( IS_ISAKMP_SA_ESTABLISHED(st->st_state)
  	     &&	(st->hidden_variables.st_nat_traversal & NAT_T_DETECTED)
  	     &&	((st->hidden_variables.st_nat_traversal & LELEM(NAT_TRAVERSAL_NAT_BHND_ME))
  		 || (_force_ka)))
-@@ -805,10 +802,7 @@
+@@ -821,10 +818,7 @@
  		struct state *st_newest;
  		st_newest = state_with_serialno(c->newest_isakmp_sa);
  		if ((st_newest)

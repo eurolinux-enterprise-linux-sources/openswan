@@ -3,23 +3,23 @@
 %define USE_LIBCAP_NG 1
 %define USE_NM 1
 %define USE_LABELED_IPSEC 1
-%define nss_version 3.12.3-2
-%define fipscheck_version 1.2.0-1
+%define nss_version 3.14.3
+%define fipscheck_version 1.2.0-7
 #737975, 693432
 %define USE_CRL_FECTCHING 1
 
 Summary: IPSEC implementation with IKEv1 and IKEv2 keying protocols
 Name: openswan
 Version: 2.6.32
+Release: 27.2%{?dist}
 
-Release: 21.2%{?dist}
 License: GPLv2+
 Url: http://www.openswan.org/
 Source: openswan-%{version}.tar.gz
-
 Source2: ipsec.conf
-#719594, 737976
 Source3: README.x509
+# rhbz#1002633 blacklist for FIPS mode
+Source4: openswan-prelink.conf
 
 Patch1: openswan-2.6-relpath.patch
 Patch2: openswan-ipsec-help-524146-509318.patch
@@ -48,28 +48,40 @@ Patch24: openswan-ikev2-795842-795850.patch
 Patch25: openswan-ikev2-ts.patch
 Patch26: openswan-768442.patch
 Patch27: openswan-771467.patch
-Patch28: openswan-831669.patch
+#Patch28: openswan-831669.patch
+Patch28: openswan-831669-mb_zig.patch
 Patch29: openswan-831676.patch
 Patch30: openswan-831676-loopback.patch
 Patch31: openswan-846797.patch
 
-Patch32: openswan-libreswan-backport-949437-atodn.patch
-Patch33: openswan-libreswan-backport-949437-x509dn.patch
-Patch34: openswan-libreswan-backport-954249.patch
-#1013971
-Patch35: openswan-880004-libreswan-ikefrag-backport.patch
-#1013985
-Patch36: openswan-libreswan-backport-initial-contact-6.4.patch
-#1012736
-Patch37: openswan-libreswan-backport-960171.patch
-#1012735
-Patch38: openswan-libreswan-backport-958969.patch
-#1015810
-Patch39: openswan-libreswan-backport-985596.patch
-#1013984
-Patch40: openswan-libreswan-backport-994240.patch
-#1013925
-Patch41: openswan-841325-6.4.patch
+Patch33: openswan-880004-libreswan-ikefrag-backport.patch
+Patch34: openswan-libreswan-backport-nat_keepalive.patch
+Patch35: openswan-libreswan-backport-initial-contact.patch
+Patch36: openswan-libreswan-backport-ikeping.patch
+Patch37: openswan-771612.patch
+Patch38: openswan-libreswan-backport-916743.patch
+Patch39: openswan-libreswan-backport-960235-atodn.patch
+Patch40: openswan-libreswan-backport-960235-no_oe.patch
+Patch41: openswan-libreswan-backport-963833-do_aes.patch
+Patch42: openswan-libreswan-backport-963833-do_3des.patch
+Patch43: openswan-841325.patch
+Patch44: openswan-957400.patch
+Patch45: openswan-libreswan-backport-960235-asn1_cleanup.patch
+Patch46: openswan-libreswan-backport-963833-get_rnd_bytes.patch
+Patch47: openswan-libreswan-backport-960235-x509dn.patch
+Patch48: openswan-libreswan-backport-960171.patch
+Patch49: openswan-libreswan-backport-958969.patch
+Patch50: openswan-848132.patch
+Patch51: openswan-868986.patch
+Patch52: openswan-747966.patch
+Patch53: openswan-libreswan-backport-954249.patch
+Patch54: openswan-libreswan-backport-881914.patch
+Patch55: openswan-libreswan-backport-985596.patch
+Patch56: openswan-libreswan-backport-975550.patch
+Patch57: openswan-libreswan-backport-994240.patch
+Patch58: openswan-libreswan-backport-1002312.patch
+Patch59: openswan-libreswan-backport-fips.patch
+Patch60: openswan-libreswan-backport-CVE-2013-6466.patch
 
 Group: System Environment/Daemons
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
@@ -164,10 +176,9 @@ find doc -name .gitignore -print0 | xargs -0 rm -v
 %patch30 -p1
 %patch31 -p1
 
-%patch32 -p1
+# pwouters backpors from libreswan
 %patch33 -p1
 %patch34 -p1
-
 %patch35 -p1
 %patch36 -p1
 %patch37 -p1
@@ -175,11 +186,29 @@ find doc -name .gitignore -print0 | xargs -0 rm -v
 %patch39 -p1
 %patch40 -p1
 %patch41 -p1
+%patch42 -p1
+%patch43 -p1
+%patch44 -p1
+%patch45 -p1
+%patch46 -p1
+%patch47 -p1
+%patch48 -p1
+%patch49 -p1
+%patch50 -p1
+%patch51 -p1
+%patch52 -p1
+%patch53 -p1
+%patch54 -p1
+%patch55 -p1
+%patch56 -p1
+%patch57 -p1
+%patch58 -p1
+%patch59 -p1
+%patch60 -p1
 
 %build
-
 %{__make} \
-  USERCOMPILE="-g %{optflags} -fPIE -pie" \
+  USERCOMPILE="-g -DGCC_LINT %{optflags} -fPIE -pie -fno-strict-aliasing -Wformat -Wformat-nonliteral -Wformat-security -Wunused-variable" \
   USERLINK="-g -pie -Wl,-z,relro -Wl,-z,now" \
   INC_USRLOCAL=%{_prefix} \
   FINALLIBDIR=%{_libexecdir}/ipsec \
@@ -191,6 +220,7 @@ find doc -name .gitignore -print0 | xargs -0 rm -v
 %endif
 %if %{USE_FIPSCHECK}
   USE_FIPSCHECK=true \
+  FIPSPRODUCTCHECK=/etc/system-fips \
 %endif
 %if %{USE_LIBCAP_NG}
   USE_LIBCAP_NG=true \
@@ -211,46 +241,12 @@ FS=$(pwd)
 
 %if %{USE_FIPSCHECK}
 # Add generation of HMAC checksums of the final stripped binaries
+%define swanexec $RPM_BUILD_ROOT%{_libexecdir}/ipsec
 %define __spec_install_post \
     %{?__debug_package:%{__debug_install_post}} \
     %{__arch_install_post} \
     %{__os_install_post} \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/setup \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/addconn \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/auto \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/barf \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/_copyright \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/eroute \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/ikeping \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/_include \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/_keycensor \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/klipsdebug \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/look \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/newhostkey \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/pf_key \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/_pluto_adns \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/_plutoload \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/_plutorun \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/ranbits \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/_realsetup \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/rsasigkey \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/pluto \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/_secretcensor \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/secrets \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/showdefaults \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/showhostkey \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/showpolicy \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/spi \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/spigrp \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/_startklips \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/_startnetkey \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/tncfg \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/_updown \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/_updown.klips \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/_updown.mast \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/_updown.netkey \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/verify \
-  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/whack \
+  fipshmac $RPM_BUILD_ROOT%{_libexecdir}/ipsec/* \
   fipshmac $RPM_BUILD_ROOT%{_sbindir}/ipsec \
 %{nil}
 %endif
@@ -272,6 +268,10 @@ rm -rf $RPM_BUILD_ROOT/usr/share/doc/openswan
 rm -f $RPM_BUILD_ROOT/etc/rc.d/init.d/setup
 rm -f $RPM_BUILD_ROOT/usr/share/man/man3/*
 install -d -m 0700 $RPM_BUILD_ROOT%{_localstatedir}/run/pluto
+%if %{USE_FIPSCHECK}
+install -d $RPM_BUILD_ROOT/%{_sysconfdir}/prelink.conf.d/
+install -m644 %{SOURCE4} $RPM_BUILD_ROOT/%{_sysconfdir}/prelink.conf.d/openswan-fips.conf
+%endif
 install -d $RPM_BUILD_ROOT%{_sbindir}
 find $RPM_BUILD_ROOT/etc/ipsec.d -type f -exec chmod 644 {} \;
 
@@ -291,6 +291,11 @@ rm -fr $RPM_BUILD_ROOT/etc/rc.d/rc*
 
 rm -fr $RPM_BUILD_ROOT%{_sysconfdir}/ipsec.d/examples
 
+# only used with KLIPS/MAST, and plutomain.c does not check its .hmac
+# in FIPS mode
+rm -rf $RPM_BUILD_ROOT%{_libexecdir}/ipsec/policy
+
+
 %clean
 rm -rf $RPM_BUILD_ROOT
 
@@ -309,12 +314,20 @@ rm -rf $RPM_BUILD_ROOT
 %attr(0700,root,root) %dir %{_sysconfdir}/ipsec.d
 %{_initrddir}/ipsec
 %{_sbindir}/ipsec
-%if %{USE_FIPSCHECK}
-%{_sbindir}/.ipsec.hmac
-%endif
-%{_libexecdir}/ipsec
+%dir %{_libexecdir}/ipsec
+%{_libexecdir}/ipsec/*
 %{_mandir}/*/*.gz
 %{_localstatedir}/run/pluto
+%if %{USE_FIPSCHECK}
+%{_sbindir}/.ipsec.hmac
+%{_libexecdir}/ipsec/.*.hmac
+%endif
+
+%if %{USE_FIPSCHECK}
+# We own the directory so we don't have to require prelink
+%attr(0755,root,root) %dir %{_sysconfdir}/prelink.conf.d/
+%{_sysconfdir}/prelink.conf.d/openswan-fips.conf
+%endif
 
 %preun
 if [ $1 = 0 ]; then
@@ -331,22 +344,55 @@ fi
 chkconfig --add ipsec || :
 
 %changelog
-* Thu Oct 10 2013 Paul Wouters <pwouters@redhat.com> - 2.6.32-21.2
-- Resolves: #1013925 - Openswan does not fully establish IKE tunnel with modecfgclient disabled 
-- Resolves: #1013984 - NAT-T transport bug affects Openswan+L2TP connections with NATed clients
+* Thu Feb 06 2014 Paul Wouters <pwouters@redhat.com> - 2.6.32-27.2
+- Resolves: rhbz#1050337 (CVE-2013-6466 refix for delete/notify code)
 
-* Wed Oct 09 2013 Paul Wouters <pwouters@redhat.com> - 2.6.32-21.1
-- Resolves: #1013971 - Openswan does not support IKE Fragmentation extension
-- Resolves: #1013985 - Openswan does not support RFC2407 Notify Payload
-- Resolves: #1012736 - initial loading of CRL always fails on pluto startup
-- Resolves: #1012735 - crl signature verification failure in when input signature is stripped of all leading zeros
-- Resolves: #1015810 - openswan does not allow SHA2 auth algorithms under FIPS
+* Wed Jan 22 2014 Paul Wouters <pwouters@redhat.com> - 2.6.32-27.1
+- Resolves: rhbz#1050337 (CVE-2013-6466)
 
-* Thu Jul 11 2013 Paul Wouters <pwouters@redhat.com> - 2.6.32-21
-Resolves: #983451 - barf and look should not cause loading of kernel modules
+* Thu Oct 17 2013 Paul Wouters <pwouters@redhat.com> - 2.6.32-27
+- Resolves: rhbz#1020322 openswan cannot start if FIPS misconfigured
 
-* Fri May 10 2013 Paul Wouters <pwouters@redhat.com> - 2.6.32-20
-Resolves: #960234 - CVE-2013-2053
+* Wed Oct 09 2013 Paul Wouters <pwouters@redhat.com> - 2.6.32-26
+- Resolves: rhbz#1017371  Verification of openswan package fails
+
+* Wed Oct 02 2013 Paul Wouters <pwouters@redhat.com> - 2.6.32-25
+- Resolves: rhbz#841325 [proxy id for_1_0_0_2_6_3_3]
+  Modified to use dracut-fips now
+
+* Thu Sep 12 2013 Paul Wouters <pwouters@redhat.com> - 2.6.32-24
+- Resolves: rhbz#1002633 API change for versioned FIPS hmac files
+
+* Tue Sep 03 2013 Paul Wouters <pwouters@redhat.com> - 2.6.32-23
+- Resolves: rhbz#998587 underspecific build requires (of nss)
+- Resolves: rhbz#1002312 IKEv2 skeyseed calculation only succeeds because of unspecified compiler behaviour
+- Resolves: rhbz#1002633 openswan needs -fips subpackage that would provide the FIPS hmac files
+
+* Fri Aug 23 2013 Paul Wouters <pwouters@redhat.com> - 2.6.32-22
+- Resolves: rhbz#994240  NAT-T transport bug affects Openswan+L2TP connections with NATed clients
+
+* Wed Aug 14 2013 Paul Wouters <pwouters@redhat.com> - 2.6.32-21
+- Resolves: rhbz#975550 ikev2 md5 hash results in incorrect policy
+- Resolves: rhbz#985596 openswan does not allow SHA2 auth algorithms under FIPS mode 
+- Resolves: rhbz#881914 openswan doesn't support SHA2 certificates
+- Resolves: rhbz#954249 barf and look should not cause loading of kernel modules
+- Resolves: rhbz#954249 barf and look should not cause loading of kernel modules
+- Resolves: rhbz#960235 CVE-2013-2053: remote buffer overflow in atodn()
+- Resolves: rhbz#963833 Abort pluto on crypto failure to prevent plaintext / nonce leak
+- Resolves: rhbz#771612 ipsec barf should not grep sparse file
+- Resolves: rhbz#841325 leftmodecfgclient=no causes rekey failure [Avesh]
+- Resolves: rhbz#848132 dpdaction=restart can cause full phase1 timeout after DPD [Avesh]
+- Resolves: rhbz#880004 Backported libreswan IKE fragmentation support 
+- Resolves: rhbz#908476 Backported libreswan INITIAL-CONTACT Notify support
+- Resolves: rhbz#796683 Backported libreswan USERCOMPILE with -fno-strict-aliasing
+- Resolves: rhbz#959568 Backported libreswan nat_keepalive=yes|no (default yes) option
+- Resolves: rhbz#916743 Backported libreswan control transmission delay timing
+- Resolves: rhbz#959566 Backported libreswan ikeping compile warnings
+- Resolves: rhbz#957400 Openswan did not load aesni_intel kernel module
+- Resolves: rhbz#960171 Initial loading of CRL always fails on pluto startup [Matt Rogers]
+- Resolves: rhbz#958969 Crl signature verification failure in when input signature is stripped of all leading zeros
+- Resolves: rhbz#868986 Fix for RDN values containing a comma [Matt Rogers]
+- Resolves: rhbz#747966 Missing else keyword
 
 *Fri Aug 24 2012 Avesh Agarwal <avagarwa@redhat.com> - 2.6.32-19
 Resolves: #846797
